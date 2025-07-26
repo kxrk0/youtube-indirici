@@ -29,18 +29,17 @@ Bu uygulama, YouTube videolarını en yüksek kalitede indirebilen, kullanımı 
 
 ## Kurulum
 
-1. Python 3.6 veya daha yüksek bir sürümün kurulu olduğundan emin olun
-2. Projeyi klonlayın veya indirin
-3. Gerekli kütüphaneleri yükleyin:
+Detaylı kurulum adımları için [INSTALLATION.md](INSTALLATION.md) dosyasına bakın.
 
-```bash
-pip install -r requirements.txt
-```
+Hızlı kurulum:
 
-4. FFmpeg'i yükleyin (opsiyonel, MP3 dönüşümü için gerekli):
-   - Windows: [FFmpeg İndirme Sayfası](https://www.ffmpeg.org/download.html)
+1. Python 3.6 veya daha yüksek bir sürüm kurun
+2. Projeyi klonlayın: `git clone https://github.com/GITHUB_KULLANICI_ADI/youtube-indirici.git`
+3. Gerekli kütüphaneleri yükleyin: `pip install -r requirements.txt`
+4. FFmpeg'i kurun (MP3 ve yüksek kaliteli video indirmek için gerekli):
+   - Windows: [FFmpeg İndirme Sayfası](https://www.gyan.dev/ffmpeg/builds/)
    - MacOS: `brew install ffmpeg`
-   - Linux: `sudo apt install ffmpeg` veya dağıtımınıza göre
+   - Linux: `sudo apt install ffmpeg`
 
 ## Kullanım
 
