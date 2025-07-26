@@ -6,6 +6,7 @@ import threading
 from typing import Dict, List, Optional, Tuple, Callable
 
 import yt_dlp
+from src.utils.helpers import get_os_download_dir
 
 class Downloader:
     """YouTube video indirmek için kullanılan sınıf"""
@@ -182,4 +183,70 @@ class Downloader:
         if self.is_downloading and self.current_task:
             # yt-dlp doğrudan iptal edilemez, bu yüzden thread'i durduramıyoruz
             # Ancak gelecek sürümlerde iptal desteği ekleyebiliriz
-            pass 
+            pass
+            
+    def process_extension_request(self, video_url: str, format_quality: str, format_type: str, 
+                                 output_path: str = None, save_metadata: bool = False) -> Dict:
+        """
+        Tarayıcı eklentisinden gelen indirme isteklerini işler
+        
+        Args:
+            video_url: İndirilecek video URL'si
+            format_quality: İstenilen video kalitesi (1080p, 720p, vb.) veya 'Audio Only'
+            format_type: İndirme tipi ('video' veya 'audio')
+            output_path: Çıktı dosyasının kaydedileceği yol
+            save_metadata: Meta verileri kaydet (JSON)
+            
+        Returns:
+            Dict: İşlem sonucu bilgisi
+        """
+        if not output_path:
+            output_path = get_os_download_dir()
+            
+        try:
+            # Ses formatı ise
+            if format_type == 'audio' or format_quality == 'Audio Only':
+                print(f"Eklentiden ses indirme isteği: {video_url}")
+                self.download_audio(
+                    url=video_url,
+                    output_path=output_path,
+                    save_info=save_metadata
+                )
+                return {
+                    "status": "success", 
+                    "message": f"MP3 indirme başlatıldı", 
+                    "type": "audio"
+                }
+            
+            # Video formatı ise
+            else:
+                # Format ID'yi belirleyelim
+                format_id = 'best'  # Varsayılan en iyi kalite
+                
+                # Eğer belirli bir çözünürlük seçildiyse
+                if format_quality in ['1080p', '720p', '480p', '360p']:
+                    # Basit bir dönüşüm, gerçek format_id'ler için video bilgisi alınmalı
+                    resolution_map = {
+                        '1080p': 'best[height<=1080]',
+                        '720p': 'best[height<=720]',
+                        '480p': 'best[height<=480]',
+                        '360p': 'best[height<=360]'
+                    }
+                    format_id = resolution_map.get(format_quality, 'best')
+                
+                print(f"Eklentiden video indirme isteği: {video_url} ({format_quality})")
+                self.download_video(
+                    url=video_url,
+                    output_path=output_path,
+                    format_id=format_id,
+                    save_info=save_metadata
+                )
+                return {
+                    "status": "success", 
+                    "message": f"{format_quality} video indirme başlatıldı", 
+                    "type": "video"
+                }
+        
+        except Exception as e:
+            print(f"Eklenti indirme hatası: {str(e)}")
+            return {"status": "error", "message": str(e)} 
