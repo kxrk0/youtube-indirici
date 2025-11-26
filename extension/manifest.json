@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Downloader Companion",
+  "version": "1.0",
+  "description": "Sends video information to the desktop application for downloading.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "notifications"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:5000/*",
+    "*://www.youtube.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["style.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_icon": "icons/download.svg",
+    "default_title": "YouTube Downloader Companion"
+  },
+  "icons": {
+    "16": "icons/download.svg",
+    "48": "icons/download.svg",
+    "128": "icons/download.svg"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/download.svg"],
+      "matches": ["*://www.youtube.com/*"]
+    }
+  ]
+} 

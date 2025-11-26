@@ -1,0 +1,55 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Local configuration and cache
+config.ini
+cache/
+downloads/
+
+# Media files that may be downloaded
+*.webm
+*.jpg
+*.png
+*.mp3
+*.mp4
+*.mkv
+
+# Windows specific
+Thumbs.db
+Desktop.ini
+
+# FFmpeg folder (downloaded locally)
+ffmpeg-*-essentials_build/
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
+
+# Temp files
+tmp/
+temp/
