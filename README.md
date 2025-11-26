@@ -1,76 +1,86 @@
-# YouTube İndirici
+# 🎬 YouTube Studio Downloader
 
-Modern ve kullanımı kolay YouTube video, shorts ve MP3 indirici uygulaması.
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
+![PyQt6](https://img.shields.io/badge/UI-PyQt6%20Fluent-green?style=for-the-badge&logo=qt)
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey?style=for-the-badge&logo=windows)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
 
-![GitHub License](https://img.shields.io/github/license/yourusername/youtube-indirici)
+**YouTube Studio Downloader**, modern Windows 11 (Fluent Design) arayüzüne sahip, yüksek performanslı ve kullanıcı dostu bir YouTube video indirme aracıdır. Videoları 4K kalitesinde indirebilir, MP3'e dönüştürebilir ve dahili kütüphanesiyle yönetebilirsiniz.
 
-## Proje Tanımı
+---
 
-Bu uygulama, YouTube videolarını en yüksek kalitede indirebilen, kullanımı kolay bir ara yüze sahip Python uygulamasıdır. PyQt6 ve yt-dlp kullanılarak geliştirilmiştir.
+## ✨ Özellikler
 
-## Özellikler
+*   🎨 **Modern Arayüz:** Windows 11 tarzı "Mica" efektli, şık ve karanlık/aydınlık mod destekli tasarım.
+*   🚀 **Yüksek Performans:** 60 FPS akıcı arayüz ve çoklu parça indirme teknolojisi ile maksimum hız.
+*   📺 **4K/8K Desteği:** En yüksek çözünürlükte video indirme imkanı (WebM -> MP4 otomatik dönüşüm).
+*   🎵 **MP3 Dönüştürücü:** Videoları tek tıkla yüksek kaliteli ses dosyasına çevirin.
+*   📚 **Akıllı Kütüphane:** İndirdiğiniz dosyaları kapak resimleriyle (thumbnail) listeleyin ve yönetin.
+*   ⚡ **Otomatik Algılama:** Panoya kopyaladığınız linkleri otomatik tanır ve hazırlar.
+*   🧩 **Tarayıcı Eklentisi:** (Opsiyonel) Tarayıcınızdan tek tıkla indirme başlatın.
 
-- YouTube videoları, Shorts videoları ve MP3 ses dosyalarını indirme
-- Orijinal kaliteyi koruma, hiçbir kalite kaybı yaşatmadan
-- Video çözünürlüğü ve format seçimi (MP4, WebM vb.)
-- Videoların meta verilerini kaydetme (başlık, kanal ismi, tarih)
-- Modern, sade ve duyarlı (responsive) arayüz
-- Sürükle-bırak ve panodan otomatik URL algılama
-- İndirme ilerleme çubuğu
-- Çapraz platform desteği (Windows, Linux, macOS)
-- FFmpeg ile yüksek kaliteli MP3 dönüşümü
+---
 
-## Gereksinimler
+## 🛠️ Kurulum
 
-- Python 3.6+
-- PyQt6
-- yt-dlp
-- FFmpeg (MP3 dönüşümü için)
+Programı çalıştırmak için bilgisayarınızda **Python 3.8** veya üzeri kurulu olmalıdır.
 
-## Kurulum
-
-Detaylı kurulum adımları için [INSTALLATION.md](INSTALLATION.md) dosyasına bakın.
-
-Hızlı kurulum:
-
-1. Python 3.6 veya daha yüksek bir sürüm kurun
-2. Projeyi klonlayın: `git clone https://github.com/GITHUB_KULLANICI_ADI/youtube-indirici.git`
-3. Gerekli kütüphaneleri yükleyin: `pip install -r requirements.txt`
-4. FFmpeg'i kurun (MP3 ve yüksek kaliteli video indirmek için gerekli):
-   - Windows: [FFmpeg İndirme Sayfası](https://www.gyan.dev/ffmpeg/builds/)
-   - MacOS: `brew install ffmpeg`
-   - Linux: `sudo apt install ffmpeg`
-
-## Kullanım
-
-Uygulamayı başlatmak için:
+### 1. Projeyi İndirin
+Bu repoyu klonlayın veya ZIP olarak indirip bir klasöre çıkarın.
 
 ```bash
+git clone https://github.com/kxrk0/youtube-indirici.git
+cd youtube-indirici
+```
+
+### 2. Otomatik Kurulum (Önerilen)
+Proje klasöründeki `install_and_run.bat` dosyasına çift tıklayın. Bu işlem:
+1.  Sanal ortam (venv) oluşturur.
+2.  Gerekli kütüphaneleri yükler.
+3.  Programı başlatır.
+
+### 3. Manuel Kurulum
+Eğer manuel kurmak isterseniz:
+
+```bash
+# Sanal ortam oluştur
+python -m venv venv
+
+# Sanal ortamı aktif et (Windows)
+.\venv\Scripts\activate
+
+# Gereksinimleri yükle
+pip install -r requirements.txt
+
+# Programı başlat
 python main.py
 ```
 
-1. YouTube video URL'sini yapıştırın veya sürükleyip bırakın
-2. "Bilgi Al" butonuna tıklayarak video bilgilerini alın
-3. İndirmek istediğiniz format türünü (video veya ses) seçin
-4. Video indiriyorsanız, istediğiniz kalite/format seçeneğini belirleyin
-5. İndirme konumunu ayarlayın
-6. "İndir" butonuna tıklayın ve indirme tamamlanana kadar bekleyin
+---
 
-## Geliştirme
+## 🖥️ Kullanım
 
-### Proje Yapısı
+1.  **Video Linkini Yapıştırın:** YouTube video bağlantısını kopyalayın, program otomatik algılayacaktır.
+2.  **Kalite Seçin:** İster 4K video, ister sadece MP3 ses dosyasını seçin.
+3.  **İndirin:** "İndirmeyi Başlat" butonuna basın.
+4.  **Kütüphane:** İndirme bitince "Kütüphane" sekmesinden videonuza ulaşabilir, oynatabilir veya klasörünü açabilirsiniz.
 
-- `main.py`: Ana uygulama girişi
-- `src/core/`: İndirme motoru ve temel işlevsellik
-- `src/ui/`: Kullanıcı arayüzü bileşenleri
-- `src/utils/`: Yardımcı fonksiyonlar ve araçlar
+---
 
-## Lisans
+## ⚙️ Gereksinimler
 
-MIT
+*   Python 3.8+
+*   FFmpeg (Proje klasöründe `ffmpeg-8.0.1-essentials_build` içinde gelmektedir, ayrıca kurulmasına gerek yoktur).
+*   İnternet bağlantısı :)
 
-## Teşekkürler
+---
 
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp): Güçlü YouTube indirme motoru
-- [PyQt6](https://www.riverbankcomputing.com/software/pyqt/): Kullanıcı arayüzü çerçevesi
-- [FFmpeg](https://ffmpeg.org/): Medya dönüştürücü 
+## 🤝 Katkıda Bulunma
+
+Projeyi geliştirmek isterseniz Pull Request göndermekten çekinmeyin! Hata bildirimleri için "Issues" sekmesini kullanabilirsiniz.
+
+---
+
+## 📄 Lisans
+
+Bu proje [MIT Lisansı](LICENSE) ile lisanslanmıştır.
