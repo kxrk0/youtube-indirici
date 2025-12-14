@@ -1,0 +1,110 @@
+{
+    "app_name": "YouTube Studio Downloader",
+    "language_name": "English",
+    "nav": {
+        "home": "Home",
+        "downloads": "Downloads",
+        "library": "Library",
+        "settings": "Settings"
+    },
+    "home": {
+        "title": "YouTube Downloader",
+        "url_placeholder": "Paste YouTube Video or Playlist URL...",
+        "paste_btn": "Paste",
+        "fetch_btn": "Get Info",
+        "download_btn": "Download",
+        "schedule_btn": "Schedule",
+        "video_waiting": "Waiting for Video Title...",
+        "channel_name": "Channel Name",
+        "duration": "Duration"
+    },
+    "download": {
+        "preparing": "Preparing...",
+        "downloading": "Downloading...",
+        "processing": "Processing...",
+        "completed": "Download Complete",
+        "cancelled": "Cancelled",
+        "error": "Error",
+        "remaining": "remaining",
+        "cancel_btn": "Cancel Download"
+    },
+    "queue": {
+        "title": "Download Queue",
+        "empty": "No downloads in queue"
+    },
+    "library": {
+        "title": "Library",
+        "refresh": "Refresh",
+        "empty": "No files in library",
+        "open_file": "Open File",
+        "open_folder": "Open Folder",
+        "delete": "Delete"
+    },
+    "settings": {
+        "title": "Settings",
+        "language_group": "Language",
+        "language_title": "App Language",
+        "language_desc": "Select interface language",
+        "personalization_group": "Personalization",
+        "theme_title": "App Theme",
+        "theme_desc": "Dark/Light",
+        "accent_title": "Accent Color",
+        "accent_desc": "Select interface accent color",
+        "download_group": "Download",
+        "folder_title": "Download Location",
+        "folder_btn": "Select Folder",
+        "speed_title": "Download Speed Limit",
+        "speed_unlimited": "Unlimited",
+        "proxy_title": "Proxy Server",
+        "proxy_placeholder": "E.g.: http://user:pass@host:port",
+        "developers_group": "Developers"
+    },
+    "format": {
+        "video": "Video",
+        "audio": "Audio (MP3)",
+        "quality": "Quality",
+        "best": "Best",
+        "select_format": "Select Format"
+    },
+    "options": {
+        "save_metadata": "Save metadata",
+        "download_subtitles": "Download subtitles"
+    },
+    "dialogs": {
+        "delete_confirm": "Are you sure you want to delete?",
+        "schedule_title": "Schedule Download",
+        "schedule_btn": "Schedule",
+        "cancel": "Cancel",
+        "yes": "Yes",
+        "no": "No"
+    },
+    "tray": {
+        "show": "Show",
+        "downloads": "Downloads",
+        "quit": "Quit",
+        "minimized_title": "YouTube Studio Downloader",
+        "minimized_msg": "App is running in background."
+    },
+    "update": {
+        "checking": "Checking for updates...",
+        "available": "New version available!",
+        "current_version": "Current version",
+        "new_version": "New version",
+        "download": "Download",
+        "later": "Later",
+        "up_to_date": "App is up to date",
+        "error": "Update check failed"
+    },
+    "errors": {
+        "invalid_url": "Invalid URL",
+        "network_error": "Network error",
+        "download_failed": "Download failed",
+        "no_formats": "No formats found"
+    },
+    "info": {
+        "playlist_detected": "Playlist detected",
+        "videos_added": "videos added",
+        "download_started": "Download started",
+        "scheduler": "Scheduler"
+    }
+}

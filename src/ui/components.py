@@ -4,13 +4,16 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from qfluentwidgets import CardWidget, FluentIcon, StrongBodyLabel, BodyLabel
 
-from src.utils.helpers import format_duration
+from src.utils.helpers import format_duration, get_monitor_refresh_rate
 
 class VideoInfoCard(CardWidget):
-    """Video Önizleme Kartı"""
+    """Video Önizleme Kartı - Dinamik refresh rate desteği"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(120)
+        
+        # Monitör refresh rate'ini al
+        self.refresh_rate = get_monitor_refresh_rate()
         
         # Animasyon için Opaklık Efekti
         self.opacity_effect = QGraphicsOpacityEffect(self)
@@ -88,19 +91,41 @@ class VideoInfoCard(CardWidget):
         self.thumb_label.setPixmap(self.default_icon)
         self.hide()
 
+    def _calculate_animation_duration(self, base_duration_ms: int) -> int:
+        """
+        Refresh rate'e göre animasyon süresini optimize eder.
+        Yüksek Hz monitörlerde daha fazla frame = daha akıcı animasyon.
+        
+        Args:
+            base_duration_ms: 60Hz için baz animasyon süresi
+            
+        Returns:
+            int: Optimize edilmiş animasyon süresi (ms)
+        """
+        # Yüksek refresh rate'lerde animasyonu biraz uzatmak daha akıcı görünür
+        # Çünkü gözümüz daha fazla kare görür
+        if self.refresh_rate >= 144:
+            return int(base_duration_ms * 1.2)  # 600ms for 144Hz+
+        elif self.refresh_rate >= 120:
+            return int(base_duration_ms * 1.1)  # 550ms for 120Hz
+        return base_duration_ms  # 500ms for 60Hz
+
     def start_entrance_animation(self):
         self.show()
         
+        # Animasyon süresini refresh rate'e göre hesapla
+        duration = self._calculate_animation_duration(500)
+        
         # Yukarıdan Aşağı Kayma Animasyonu
         self.pos_anim = QPropertyAnimation(self, b"pos")
-        self.pos_anim.setDuration(500)
+        self.pos_anim.setDuration(duration)
         self.pos_anim.setStartValue(QPoint(self.x(), self.y() - 20))
         self.pos_anim.setEndValue(QPoint(self.x(), self.y()))
         self.pos_anim.setEasingCurve(QEasingCurve.Type.OutBack)
         
         # Opaklık (Fade-In) Animasyonu
         self.fade_anim = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.fade_anim.setDuration(500)
+        self.fade_anim.setDuration(duration)
         self.fade_anim.setStartValue(0)
         self.fade_anim.setEndValue(1)
         

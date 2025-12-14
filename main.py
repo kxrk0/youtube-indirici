@@ -11,7 +11,7 @@ from src.ui.main_window import MainWindow
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from src.core.downloader import Downloader
-from src.utils.helpers import get_os_download_dir
+from src.utils.helpers import get_os_download_dir, setup_ffmpeg_path
 
 # Global değişkenler
 app = Flask(__name__)
@@ -64,23 +64,46 @@ def start_flask_server():
 def main():
     global downloader
     
-    # --- PERFORMANS OPTİMİZASYONU ---
-    # Qt'nin animasyon motorunu Windows için optimize et
-    os.environ["QT_QPA_PLATFORM"] = "windows:darkmode=2" # Windows Dark Mode tam entegrasyonu
-    os.environ["QT_OPENGL"] = "desktop" 
-    os.environ["QSG_RENDER_LOOP"] = "basic" # 'basic' bazen 'windows'tan daha stabildir (takılmayı önler)
-    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0" # FluentWidgets zaten DPI yönetiyor
+    # FFmpeg'i PATH'e ekle
+    setup_ffmpeg_path()
     
-    # VSync ve Refresh Rate Senkronizasyonu
+    # --- PERFORMANS OPTİMİZASYONU (180+ FPS) ---
+    # GPU Hızlandırma: ANGLE/D3D11 (Windows'ta en stabil seçenek)
+    os.environ["QT_OPENGL"] = "angle"
+    os.environ["QT_ANGLE_PLATFORM"] = "d3d11"
+    
+    # Threaded Render Loop - GPU render ayrı thread'de
+    os.environ["QSG_RENDER_LOOP"] = "threaded"
+    
+    # GPU batch rendering - daha az draw call
+    os.environ["QSG_RENDERER_BATCH_SIZE"] = "256"
+    
+    # Qt Quick optimizasyonları
+    os.environ["QML_DISABLE_DISTANCEFIELD"] = "1"  # Metin render optimizasyonu
+    
+    # Yüksek DPI yönetimi
+    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
+    os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
+    
+    # GPU Surface Ayarları - Yüksek Hz monitörler için
     format = QSurfaceFormat()
-    format.setRenderableType(QSurfaceFormat.RenderableType.OpenGL)
-    format.setSwapInterval(0)  # VSync'i KAPAT (Maksimum FPS için - bazen VSync stutter yapar)
-    # Eğer VSync kapalıyken tearing (yırtılma) olursa burayı 1 yapın.
+    format.setRenderableType(QSurfaceFormat.RenderableType.OpenGLES)
+    format.setVersion(3, 0)  # OpenGL ES 3.0
+    format.setSwapBehavior(QSurfaceFormat.SwapBehavior.DoubleBuffer)
+    
+    # VSync: 0 = kapalı (unlocked FPS), 1 = açık (tearing önleme)
+    # 180Hz monitör için VSync kapalı daha iyi çünkü GPU yeterince güçlü
+    format.setSwapInterval(0)  # VSync KAPALI - maksimum FPS
+    
+    format.setSamples(4)  # 4x MSAA
+    format.setDepthBufferSize(24)
+    format.setStencilBufferSize(8)
+    format.setAlphaBufferSize(8)
     QSurfaceFormat.setDefaultFormat(format)
     
     # PyQt uygulamasını başlat
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseDesktopOpenGL)
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseOpenGLES)  # ANGLE için
     
     qt_app = QApplication(sys.argv)
     qt_app.setApplicationName("YouTube İndirici")
@@ -106,6 +129,13 @@ def main():
     
     print("Flask API sunucusu başlatıldı: http://127.0.0.1:5000")
     print("Tarayıcı eklentisi istekleri için hazır")
+    
+    # Monitör bilgisi
+    screen = qt_app.primaryScreen()
+    if screen:
+        refresh_rate = screen.refreshRate()
+        print(f"🖥️  Monitör: {screen.name()} @ {refresh_rate:.0f}Hz")
+        print(f"⚡ Animasyon interval: {max(1, int(1000 / refresh_rate))}ms ({refresh_rate:.0f} FPS hedef)")
     
     # Qt event loop'unu başlat
     sys.exit(qt_app.exec())

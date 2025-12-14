@@ -1,0 +1,110 @@
+{
+    "app_name": "YouTube Studio Downloader",
+    "language_name": "Deutsch",
+    "nav": {
+        "home": "Startseite",
+        "downloads": "Downloads",
+        "library": "Bibliothek",
+        "settings": "Einstellungen"
+    },
+    "home": {
+        "title": "YouTube Downloader",
+        "url_placeholder": "YouTube Video oder Playlist URL einfügen...",
+        "paste_btn": "Einfügen",
+        "fetch_btn": "Info abrufen",
+        "download_btn": "Herunterladen",
+        "schedule_btn": "Planen",
+        "video_waiting": "Warte auf Videotitel...",
+        "channel_name": "Kanalname",
+        "duration": "Dauer"
+    },
+    "download": {
+        "preparing": "Vorbereitung...",
+        "downloading": "Wird heruntergeladen...",
+        "processing": "Verarbeitung...",
+        "completed": "Download abgeschlossen",
+        "cancelled": "Abgebrochen",
+        "error": "Fehler",
+        "remaining": "verbleibend",
+        "cancel_btn": "Download abbrechen"
+    },
+    "queue": {
+        "title": "Download-Warteschlange",
+        "empty": "Keine Downloads in der Warteschlange"
+    },
+    "library": {
+        "title": "Bibliothek",
+        "refresh": "Aktualisieren",
+        "empty": "Keine Dateien in der Bibliothek",
+        "open_file": "Datei öffnen",
+        "open_folder": "Ordner öffnen",
+        "delete": "Löschen"
+    },
+    "settings": {
+        "title": "Einstellungen",
+        "language_group": "Sprache",
+        "language_title": "App-Sprache",
+        "language_desc": "Schnittstellensprache auswählen",
+        "personalization_group": "Personalisierung",
+        "theme_title": "App-Thema",
+        "theme_desc": "Dunkel/Hell",
+        "accent_title": "Akzentfarbe",
+        "accent_desc": "Akzentfarbe der Schnittstelle auswählen",
+        "download_group": "Download",
+        "folder_title": "Download-Speicherort",
+        "folder_btn": "Ordner auswählen",
+        "speed_title": "Download-Geschwindigkeitslimit",
+        "speed_unlimited": "Unbegrenzt",
+        "proxy_title": "Proxy-Server",
+        "proxy_placeholder": "Z.B.: http://user:pass@host:port",
+        "developers_group": "Entwickler"
+    },
+    "format": {
+        "video": "Video",
+        "audio": "Audio (MP3)",
+        "quality": "Qualität",
+        "best": "Beste",
+        "select_format": "Format auswählen"
+    },
+    "options": {
+        "save_metadata": "Metadaten speichern",
+        "download_subtitles": "Untertitel herunterladen"
+    },
+    "dialogs": {
+        "delete_confirm": "Sind Sie sicher, dass Sie löschen möchten?",
+        "schedule_title": "Download planen",
+        "schedule_btn": "Planen",
+        "cancel": "Abbrechen",
+        "yes": "Ja",
+        "no": "Nein"
+    },
+    "tray": {
+        "show": "Anzeigen",
+        "downloads": "Downloads",
+        "quit": "Beenden",
+        "minimized_title": "YouTube Studio Downloader",
+        "minimized_msg": "App läuft im Hintergrund."
+    },
+    "update": {
+        "checking": "Suche nach Updates...",
+        "available": "Neue Version verfügbar!",
+        "current_version": "Aktuelle Version",
+        "new_version": "Neue Version",
+        "download": "Herunterladen",
+        "later": "Später",
+        "up_to_date": "App ist aktuell",
+        "error": "Update-Prüfung fehlgeschlagen"
+    },
+    "errors": {
+        "invalid_url": "Ungültige URL",
+        "network_error": "Netzwerkfehler",
+        "download_failed": "Download fehlgeschlagen",
+        "no_formats": "Keine Formate gefunden"
+    },
+    "info": {
+        "playlist_detected": "Playlist erkannt",
+        "videos_added": "Videos hinzugefügt",
+        "download_started": "Download gestartet",
+        "scheduler": "Planer"
+    }
+}

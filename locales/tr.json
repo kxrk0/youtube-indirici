@@ -1,0 +1,123 @@
+{
+  "app_name": "YouTube Studio Downloader",
+  "language_name": "Türkçe",
+  
+  "nav": {
+    "home": "Ana Sayfa",
+    "downloads": "İndirilenler",
+    "library": "Kütüphane",
+    "settings": "Ayarlar"
+  },
+  
+  "home": {
+    "title": "YouTube İndirici",
+    "url_placeholder": "YouTube Video veya Playlist URL'si yapıştırın...",
+    "paste_btn": "Yapıştır",
+    "fetch_btn": "Bilgi Al",
+    "download_btn": "İndir",
+    "schedule_btn": "Zamanla",
+    "video_waiting": "Video Başlığı Bekleniyor...",
+    "channel_name": "Kanal Adı",
+    "duration": "Süre"
+  },
+  
+  "download": {
+    "preparing": "Hazırlanıyor...",
+    "downloading": "İndiriliyor...",
+    "processing": "Dönüştürülüyor...",
+    "completed": "İndirme Tamamlandı",
+    "cancelled": "İptal Edildi",
+    "error": "Hata",
+    "remaining": "kaldı",
+    "cancel_btn": "İndirmeyi İptal Et"
+  },
+  
+  "queue": {
+    "title": "İndirme Kuyruğu",
+    "empty": "Kuyrukta indirme yok"
+  },
+  
+  "library": {
+    "title": "Kütüphane",
+    "refresh": "Yenile",
+    "empty": "Kütüphanede dosya yok",
+    "open_file": "Dosyayı Aç",
+    "open_folder": "Klasörü Aç",
+    "delete": "Sil"
+  },
+  
+  "settings": {
+    "title": "Ayarlar",
+    "language_group": "Dil / Language",
+    "language_title": "Uygulama Dili",
+    "language_desc": "Arayüz dilini seçin",
+    "personalization_group": "Kişiselleştirme",
+    "theme_title": "Uygulama Teması",
+    "theme_desc": "Karanlık/Aydınlık",
+    "accent_title": "Vurgu Rengi",
+    "accent_desc": "Arayüz vurgu rengini seçin",
+    "download_group": "İndirme",
+    "folder_title": "İndirme Konumu",
+    "folder_btn": "Klasörü Seç",
+    "speed_title": "İndirme Hızı Limiti",
+    "speed_unlimited": "Sınırsız",
+    "proxy_title": "Proxy Sunucusu",
+    "proxy_placeholder": "Örn: http://user:pass@host:port",
+    "developers_group": "Geliştiriciler"
+  },
+  
+  "format": {
+    "video": "Video",
+    "audio": "Ses (MP3)",
+    "quality": "Kalite",
+    "best": "En İyi",
+    "select_format": "Format Seç"
+  },
+  
+  "options": {
+    "save_metadata": "Meta verileri kaydet",
+    "download_subtitles": "Altyazı indir"
+  },
+  
+  "dialogs": {
+    "delete_confirm": "Silmek istediğinize emin misiniz?",
+    "schedule_title": "İndirme Zamanla",
+    "schedule_btn": "Zamanla",
+    "cancel": "İptal",
+    "yes": "Evet",
+    "no": "Hayır"
+  },
+  
+  "tray": {
+    "show": "Göster",
+    "downloads": "İndirilenler",
+    "quit": "Çıkış",
+    "minimized_title": "YouTube Studio Downloader",
+    "minimized_msg": "Uygulama arka planda çalışmaya devam ediyor."
+  },
+  
+  "update": {
+    "checking": "Güncellemeler kontrol ediliyor...",
+    "available": "Yeni sürüm mevcut!",
+    "current_version": "Mevcut sürüm",
+    "new_version": "Yeni sürüm",
+    "download": "İndir",
+    "later": "Sonra",
+    "up_to_date": "Uygulama güncel",
+    "error": "Güncelleme kontrolü başarısız"
+  },
+  
+  "errors": {
+    "invalid_url": "Geçersiz URL",
+    "network_error": "Ağ hatası",
+    "download_failed": "İndirme başarısız",
+    "no_formats": "Format bulunamadı"
+  },
+  
+  "info": {
+    "playlist_detected": "Playlist tespit edildi",
+    "videos_added": "video eklendi",
+    "download_started": "İndirme başladı",
+    "scheduler": "Zamanlayıcı"
+  }
+}
