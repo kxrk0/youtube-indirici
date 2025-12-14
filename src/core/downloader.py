@@ -136,7 +136,9 @@ class Downloader:
                       save_info: bool = False,
                       ratelimit: Optional[str] = None,
                       write_sub: bool = False,
-                      sub_langs: str = 'tr,en') -> DownloadTask:
+                      sub_langs: str = 'tr,en',
+                      start_time: str = None,
+                      end_time: str = None) -> DownloadTask:
         """
         Video indirir
         
@@ -151,6 +153,8 @@ class Downloader:
             ratelimit: Hız limiti
             write_sub: Altyazı indir
             sub_langs: Altyazı dilleri
+            start_time: Başlangıç zamanı (HH:MM:SS veya saniye)
+            end_time: Bitiş zamanı (HH:MM:SS veya saniye)
             
         Returns:
             DownloadTask: İndirme görevi nesnesi (iptal için kullanılabilir)
@@ -250,6 +254,21 @@ class Downloader:
             if ratelimit:
                 ydl_opts['ratelimit'] = ratelimit
             
+            # Video kesme (trim) desteği
+            if start_time or end_time:
+                # yt-dlp'nin download_ranges özelliğini kullan
+                ranges = []
+                start_sec = self._parse_time(start_time) if start_time else None
+                end_sec = self._parse_time(end_time) if end_time else None
+                
+                if start_sec is not None or end_sec is not None:
+                    ranges.append({
+                        'start_time': start_sec,
+                        'end_time': end_sec
+                    })
+                    ydl_opts['download_ranges'] = lambda info, ranges=ranges: ranges
+                    ydl_opts['force_keyframes_at_cuts'] = True
+            
             ffmpeg_path = get_ffmpeg_path()
             if ffmpeg_path:
                 ydl_opts['ffmpeg_location'] = ffmpeg_path
@@ -328,6 +347,42 @@ class Downloader:
             )
         except Exception as e:
             print(f"Geçmişe kaydetme hatası: {e}")
+            
+    def _parse_time(self, time_str: str) -> float:
+        """
+        Zaman string'ini saniyeye çevir
+        
+        Desteklenen formatlar:
+        - Saniye: "120" veya "120.5"
+        - MM:SS: "2:30"
+        - HH:MM:SS: "1:30:00"
+        """
+        if not time_str:
+            return 0
+            
+        time_str = time_str.strip()
+        
+        # Direkt saniye olarak dene
+        try:
+            return float(time_str)
+        except ValueError:
+            pass
+        
+        # Zaman formatı (HH:MM:SS veya MM:SS)
+        parts = time_str.split(':')
+        try:
+            if len(parts) == 2:
+                # MM:SS
+                minutes, seconds = parts
+                return int(minutes) * 60 + float(seconds)
+            elif len(parts) == 3:
+                # HH:MM:SS
+                hours, minutes, seconds = parts
+                return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+        except (ValueError, TypeError):
+            pass
+        
+        return 0
         
         # Thread'de başlat
         thread = threading.Thread(target=_download_with_retry)
@@ -344,10 +399,36 @@ class Downloader:
                       progress_callback: Optional[Callable] = None,
                       complete_callback: Optional[Callable] = None,
                       save_info: bool = False,
-                      ratelimit: Optional[str] = None) -> None:
-        """Sadece ses indirir (MP3 formatında)"""
+                      ratelimit: Optional[str] = None,
+                      normalize_audio: bool = False,
+                      target_loudness: float = -16.0) -> None:
+        """
+        Sadece ses indirir (MP3 formatında)
+        
+        Args:
+            normalize_audio: Ses normalizasyonu uygula (loudnorm filtresi)
+            target_loudness: Hedef ses seviyesi (LUFS, varsayılan: -16.0)
+        """
         def _download_audio():
             self.is_downloading = True
+            
+            postprocessors = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': audio_quality,
+            }, {
+                'key': 'EmbedThumbnail',
+            }, {
+                'key': 'FFmpegMetadata',
+            }]
+            
+            # Ses normalizasyonu ekle
+            if normalize_audio:
+                postprocessors.insert(1, {
+                    'key': 'FFmpegPostProcessor',
+                    # loudnorm filtresi - I: entegre ses, TP: true peak, LRA: loudness range
+                    'extra_args': ['-af', f'loudnorm=I={target_loudness}:TP=-1.5:LRA=11']
+                })
             
             ydl_opts = {
                 'format': 'bestaudio/best',
@@ -355,17 +436,9 @@ class Downloader:
                 'writethumbnail': True,
                 'concurrent_fragment_downloads': 8,
                 'http_chunk_size': 10485760,
-                'writeinfojson': save_info,  # Meta verileri kaydetme seçeneği
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': audio_quality,
-                }, {
-                    'key': 'EmbedThumbnail',  # Küçük resmi MP3'e göm
-                }, {
-                    'key': 'FFmpegMetadata',  # Meta verileri aktar
-                }],
-                'keepvideo': False,  # Kaynak dosyalarını sil
+                'writeinfojson': save_info,
+                'postprocessors': postprocessors,
+                'keepvideo': False,
                 'quiet': True,
                 'no_warnings': False,
                 'ignoreerrors': False,

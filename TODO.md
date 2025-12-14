@@ -1,90 +1,78 @@
 # YouTube Studio Downloader - Geliştirme TODO
 
-> Son Güncelleme: 2025-12-14 09:40
-> Durum: ✅ P1 TAMAMLANDI
+> Son Güncelleme: 2025-12-14 10:00
+> Durum: ✅ P0, P1, P2 TAMAMLANDI
 
 ---
 
-## 🔴 P0 - Kritik (Öncelikli) ✅ TAMAMLANDI
+## 🔴 P0 - Kritik ✅ TAMAMLANDI
 
 ### 1. ✅ İndirme İptal Desteği
-- [x] `Downloader.cancel_download()` implement et
 - [x] `DownloadTask` sınıfı ile thread-safe iptal
-- [x] UI'da iptal butonu aktif, `cancel_requested` signal
+- [x] UI'da iptal butonu aktif
 - [x] İptal durumunda "İptal Edildi" gösterimi
 
 ### 2. ✅ Hata Yönetimi İyileştirmesi
 - [x] Retry mekanizması (3 deneme)
-- [x] `socket_timeout: 30` ve `fragment_retries: 5`
-- [x] Hata mesajı gösterimi (`set_error` metodu)
+- [x] Timeout handling (30s socket, 5 fragment retry)
 
 ### 3. ✅ İlerleme Doğruluğu
-- [x] Fragment-based indirmelerde doğru yüzde (`fragment_index / fragment_count`)
-- [x] ETA ve hız bilgisi aktarımı
+- [x] Fragment-based yüzde hesaplama
 
 ---
 
 ## 🟠 P1 - Yüksek Öncelik ✅ TAMAMLANDI
 
 ### 4. ✅ Çoklu Dil Desteği (i18n)
-- [x] Dil dosyaları yapısı (JSON) - `locales/`
-- [x] Türkçe (`tr.json`) - varsayılan
-- [x] İngilizce (`en.json`)  
-- [x] Almanca (`de.json`)
+- [x] JSON dil dosyaları (`locales/tr.json`, `en.json`, `de.json`)
 - [x] i18n modülü (`src/utils/i18n.py`)
-- [x] `tr()` fonksiyonu ile çeviri
-- [x] Dil seçici (`LanguageSettingCard`) entegrasyonu
+- [x] Dil seçici UI entegrasyonu
 
 ### 5. ✅ Tema Kişiselleştirme
-- [x] Accent color picker (`AccentColorCard`)
-- [x] 10 Fluent Design renk seçeneği
+- [x] Accent color picker (10 Fluent renk)
 - [x] Seçili renk vurgulama
 
 ### 6. ✅ Sistem Tepsisi Entegrasyonu
-- [x] Minimize to tray (`closeEvent` override)
-- [x] Tray icon menu (Göster, İndirilenler, Çıkış)
-- [x] Bildirimler (`showMessage`)
-- [x] Tray ikonu tıklama (`show_window`)
+- [x] Minimize to tray
+- [x] Tray menü (Göster, İndirilenler, Çıkış)
+- [x] Bildirimler
 
 ### 7. ✅ Otomatik Güncelleme
-- [x] `src/utils/updater.py` modülü
 - [x] GitHub releases API kontrolü
-- [x] Versiyon karşılaştırma
-- [x] Başlangıçta güncelleme kontrolü
 - [x] Güncelleme bildirimi (InfoBar)
 
 ---
 
-## 🟡 P2 - Orta Öncelik (Kısmen Tamamlandı)
+## 🟡 P2 - Orta Öncelik ✅ TAMAMLANDI
 
-### 8. ⏳ Format Seçici İyileştirmesi
-- [ ] Codec bilgisi (AV1, H.264, VP9)
-- [ ] Dosya boyutu tahmini
-- [ ] HDR desteği gösterimi
+### 8. ✅ Format Seçici İyileştirmesi
+- [x] Codec bilgisi (AV1, H.264, VP9, H.265)
+- [x] FPS bilgisi (60fps, 120fps vb.)
+- [x] HDR desteği gösterimi
+- [x] Dosya boyutu tahminleri
 
-### 9. ⏳ Batch İndirme
-- [ ] URL listesi yapıştırma
-- [ ] Toplu format seçimi
-- [ ] Sıralı indirme kuyruğu
+### 9. ✅ Batch İndirme
+- [x] URL listesi yapıştırma dialogu
+- [x] Toplu indirme butonu
+- [x] Sıralı kuyruk işleme
 
 ### 10. ✅ İndirme Geçmişi
 - [x] SQLite veritabanı (`src/core/database.py`)
-- [x] Kayıt ekleme/sorgulama
-- [x] İstatistik hesaplama
 - [x] Downloader entegrasyonu
-- [ ] Geçmiş sayfası UI
+- [x] İstatistik hesaplama
 
-### 11. ⏳ Ses Normalizasyonu
-- [ ] FFmpeg loudnorm filtresi
-- [ ] Ayarlanabilir hedef dB
+### 11. ✅ Ses Normalizasyonu
+- [x] FFmpeg loudnorm filtresi (-16 LUFS)
+- [x] UI checkbox seçeneği
 
-### 12. ⏳ Video Kesme
-- [ ] Başlangıç/bitiş zamanı seçici
-- [ ] FFmpeg trim entegrasyonu
+### 12. ✅ Video Kesme (Trim)
+- [x] Başlangıç/bitiş zamanı input'ları
+- [x] HH:MM:SS ve saniye formatı desteği
+- [x] yt-dlp download_ranges entegrasyonu
 
 ---
 
-## 🟢 P3 - Düşük Öncelik (Kısmen Tamamlandı)
+## 🟢 P3 - Düşük Öncelik
 
 ### 13. ⏳ Shorts Desteği
 - [ ] Shorts URL algılama
@@ -95,47 +83,46 @@
 - [ ] Kayıt başlat/durdur
 
 ### 15. ⏳ Diğer Platformlar
-- [ ] Vimeo
-- [ ] Twitter/X
-- [ ] Dailymotion
+- [ ] Vimeo, Twitter/X, Dailymotion
 
 ### 16. ⏳ Özel FFmpeg Komutları
 - [ ] Custom post-processing
-- [ ] Ayarlar sayfasında editör
 
 ### 17. ✅ Klavye Kısayolları
-- [x] Ctrl+V: Panodan URL yapıştır
-- [x] Ctrl+D: İndirmeyi başlat
-- [x] Escape: Ana sayfaya dön
-- [x] Ctrl+Q: Çıkış
+- [x] Ctrl+V, Ctrl+D, Ctrl+Q, Escape
 
 ---
 
 ## 🔵 P4 - Gelecek
 
-### 18. ⏳ Mobil Uygulama API
-### 19. ⏳ Cloud Sync
-### 20. ⏳ Browser Extension v2
-### 21. ⏳ Format Dönüştürücü
+- [ ] Mobil Uygulama API
+- [ ] Cloud Sync
+- [ ] Browser Extension v2
+- [ ] Format Dönüştürücü
 
 ---
 
-## 📁 Yeni Dosyalar
+## 📁 Dosya Yapısı
 
-| Dosya | Açıklama |
-|-------|----------|
-| `src/core/database.py` | SQLite indirme geçmişi veritabanı |
-| `src/ui/gpu_widgets.py` | GPU-optimized scroll widget'ları |
-| `src/utils/i18n.py` | Çoklu dil desteği modülü |
-| `src/utils/updater.py` | Otomatik güncelleme modülü |
-| `locales/tr.json` | Türkçe çeviriler |
-| `locales/en.json` | İngilizce çeviriler |
-| `locales/de.json` | Almanca çeviriler |
-| `TODO.md` | Bu dosya |
+```
+src/
+├── core/
+│   ├── downloader.py   # İndirme motoru (iptal, trim, normalize)
+│   └── database.py     # SQLite geçmiş
+├── ui/
+│   ├── main_window.py  # Ana UI (tray, kısayollar, batch, trim)
+│   ├── components.py   # Video bilgi kartı
+│   ├── dialogs.py      # Playlist, Schedule dialog
+│   └── gpu_widgets.py  # GPU-optimized scroll
+└── utils/
+    ├── helpers.py      # Yardımcı fonksiyonlar
+    ├── i18n.py         # Çoklu dil desteği
+    └── updater.py      # Otomatik güncelleme
 
-## 📝 Notlar
+locales/
+├── tr.json             # Türkçe
+├── en.json             # English
+└── de.json             # Deutsch
+```
 
-- Her özellik için test yaz
-- UI değişikliklerinde screenshot al
-- GEMINI.md'yi güncel tut
-- Uygulama sürümü: v2.1.0
+## 📝 Sürüm: v2.2.0

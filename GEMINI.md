@@ -124,12 +124,12 @@ QML_DISABLE_DISTANCEFIELD=1
 - [x] **Sistem Tepsisi Entegrasyonu**: Minimize to tray, bildirimler
 - [x] **Otomatik Güncelleme**: GitHub releases API (`src/utils/updater.py`)
 
-### 🟡 Orta (P2)
-- [ ] **Format Seçici İyileştirmesi**: Video codec bilgisi (AV1, H.264, VP9)
-- [ ] **Batch İndirme**: URL listesi yapıştırma ve toplu indirme
+### 🟡 Orta (P2) ✅
+- [x] **Format Seçici İyileştirmesi**: Codec bilgisi (AV1, H.264, VP9, H.265), FPS, HDR
+- [x] **Batch İndirme**: URL listesi dialog, toplu indirme butonu
 - [x] **İndirme Geçmişi**: SQLite veritabanı (`src/core/database.py`)
-- [ ] **Ses Normalizasyonu**: FFmpeg ile loudnorm filtresi
-- [ ] **Video Kesme**: Başlangıç/bitiş zamanı ile kısmi indirme
+- [x] **Ses Normalizasyonu**: FFmpeg loudnorm filtresi (-16 LUFS)
+- [x] **Video Kesme**: Başlangıç/bitiş zamanı ile kısmi indirme
 
 ### 🟢 Düşük (P3)
 - [ ] **Shorts Desteği**: YouTube Shorts için optimize indirme

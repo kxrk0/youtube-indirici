@@ -276,8 +276,13 @@ class HomeInterface(ScrollArea):
         self.paste_btn = PushButton(FluentIcon.PASTE, "Yapıştır", self.view)
         self.paste_btn.clicked.connect(self.paste_from_clipboard)
         
+        self.batch_btn = PushButton(FluentIcon.ADD, "Toplu", self.view)
+        self.batch_btn.setToolTip("URL Listesi Yapıştır (Batch İndirme)")
+        self.batch_btn.clicked.connect(self.show_batch_dialog)
+        
         input_row.addWidget(self.url_input)
         input_row.addWidget(self.paste_btn)
+        input_row.addWidget(self.batch_btn)
         self.input_layout.addLayout(input_row)
         self.v_layout.addWidget(self.input_card)
         
@@ -343,6 +348,37 @@ class HomeInterface(ScrollArea):
         self.options_layout.addWidget(self.meta_check)
         self.options_layout.addWidget(self.thumb_check)
         self.options_layout.addWidget(self.subs_check)
+        
+        # Gelişmiş Seçenekler
+        self.advanced_label = SubtitleLabel("Gelişmiş Seçenekler", self.view)
+        self.options_layout.addWidget(self.advanced_label)
+        
+        # Ses normalizasyonu (MP3 için)
+        self.normalize_check = CheckBox("Ses normalizasyonu (loudnorm -16 LUFS)", self.view)
+        self.normalize_check.setToolTip("Ses seviyesini normalize eder - özellikle podcast/müzik için önerilir")
+        self.options_layout.addWidget(self.normalize_check)
+        
+        # Video kesme (trim)
+        trim_row = QHBoxLayout()
+        self.trim_check = CheckBox("Video kes:", self.view)
+        self.trim_check.toggled.connect(self.on_trim_toggled)
+        
+        self.start_time_input = LineEdit(self.view)
+        self.start_time_input.setPlaceholderText("Başlangıç (0:30)")
+        self.start_time_input.setFixedWidth(100)
+        self.start_time_input.setEnabled(False)
+        
+        self.end_time_input = LineEdit(self.view)
+        self.end_time_input.setPlaceholderText("Bitiş (2:30)")
+        self.end_time_input.setFixedWidth(100)
+        self.end_time_input.setEnabled(False)
+        
+        trim_row.addWidget(self.trim_check)
+        trim_row.addWidget(self.start_time_input)
+        trim_row.addWidget(BodyLabel("-", self.view))
+        trim_row.addWidget(self.end_time_input)
+        trim_row.addStretch()
+        self.options_layout.addLayout(trim_row)
         
         self.v_layout.addWidget(self.options_card)
         
@@ -423,6 +459,7 @@ class HomeInterface(ScrollArea):
             self.auto_quality_label.hide()
 
     def populate_formats(self, formats):
+        """Format listesini codec bilgisiyle doldur"""
         self.quality_combo.clear()
         self.quality_combo.addItem("En İyi Kalite (Otomatik)", "best")
         
@@ -433,11 +470,17 @@ class HomeInterface(ScrollArea):
                 height = fmt.get('height')
                 resolution = fmt.get('resolution')
                 ext = fmt.get('ext')
-                vcodec = fmt.get('vcodec')
+                vcodec = fmt.get('vcodec', '')
+                acodec = fmt.get('acodec', '')
                 filesize = fmt.get('filesize') or fmt.get('filesize_approx')
+                fps = fmt.get('fps')
+                dynamic_range = fmt.get('dynamic_range')  # HDR bilgisi
                 
-                if vcodec == 'none': continue
+                # Sadece ses formatlarını atla
+                if vcodec == 'none' or not vcodec: 
+                    continue
                 
+                # Yüksekliği çıkar
                 if height is None and resolution:
                     try:
                         if 'x' in resolution:
@@ -448,18 +491,70 @@ class HomeInterface(ScrollArea):
                 height_val = int(height) if height else 0
                 res_str = f"{height_val}p" if height_val > 0 else "Bilinmeyen"
                 
-                size_str = format_size(filesize) if filesize else "?"
-                display_ext = f"{ext} -> MP4" if ext in ['webm', 'mkv'] else ext
-                label = f"{res_str} - {display_ext} ({size_str})"
+                # Codec bilgisini formatla
+                codec_str = self._format_codec(vcodec)
                 
-                available_formats.append((format_id, label, height_val))
-            except: continue
+                # FPS bilgisi
+                fps_str = f"{int(fps)}fps" if fps and fps > 30 else ""
+                
+                # HDR bilgisi
+                hdr_str = "HDR" if dynamic_range and dynamic_range != 'SDR' else ""
+                
+                # Dosya boyutu
+                size_str = format_size(filesize) if filesize else "?"
+                
+                # Çıktı formatı
+                display_ext = f"{ext}→MP4" if ext in ['webm', 'mkv'] else ext.upper()
+                
+                # Etiket oluştur
+                label_parts = [res_str]
+                if codec_str:
+                    label_parts.append(codec_str)
+                if fps_str:
+                    label_parts.append(fps_str)
+                if hdr_str:
+                    label_parts.append(hdr_str)
+                label_parts.append(f"[{display_ext}]")
+                label_parts.append(f"({size_str})")
+                
+                label = " ".join(label_parts)
+                
+                available_formats.append((format_id, label, height_val, fps or 0))
+            except: 
+                continue
         
+        # Yükseklik ve FPS'e göre sırala
         seen = set()
-        for fmt_id, label, h in sorted(available_formats, key=lambda x: x[2], reverse=True):
+        for fmt_id, label, h, f in sorted(available_formats, key=lambda x: (x[2], x[3]), reverse=True):
             if label not in seen:
                 self.quality_combo.addItem(label, f"{fmt_id}+bestaudio/best")
                 seen.add(label)
+                
+    def _format_codec(self, vcodec: str) -> str:
+        """Codec adını kullanıcı dostu formata çevir"""
+        if not vcodec or vcodec == 'none':
+            return ""
+        
+        vcodec_lower = vcodec.lower()
+        
+        # AV1
+        if 'av01' in vcodec_lower or 'av1' in vcodec_lower:
+            return "AV1"
+        # VP9
+        elif 'vp9' in vcodec_lower or 'vp09' in vcodec_lower:
+            return "VP9"
+        # H.265/HEVC
+        elif 'hvc1' in vcodec_lower or 'hev1' in vcodec_lower or 'hevc' in vcodec_lower or 'h265' in vcodec_lower:
+            return "H.265"
+        # H.264/AVC
+        elif 'avc1' in vcodec_lower or 'avc' in vcodec_lower or 'h264' in vcodec_lower:
+            return "H.264"
+        # VP8
+        elif 'vp8' in vcodec_lower:
+            return "VP8"
+        else:
+            # Bilinmeyen codec - kısalt
+            return vcodec[:8] if len(vcodec) > 8 else vcodec
 
     def paste_from_clipboard(self):
         text = get_clipboard_text()
@@ -468,10 +563,87 @@ class HomeInterface(ScrollArea):
     def browse_directory(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Klasör Seç", self.path_input.text())
         if dir_path: self.path_input.setText(dir_path)
+        
+    def show_batch_dialog(self):
+        """Toplu URL yapıştırma dialogu"""
+        from qfluentwidgets import MessageBoxBase, TextEdit
+        
+        class BatchDownloadDialog(MessageBoxBase):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self.titleLabel.setText("Toplu İndirme")
+                
+                info_label = BodyLabel("Her satıra bir URL yazın veya yapıştırın:", self)
+                self.viewLayout.addWidget(info_label)
+                
+                self.url_text = TextEdit(self)
+                self.url_text.setPlaceholderText(
+                    "https://youtube.com/watch?v=...\n"
+                    "https://youtube.com/watch?v=...\n"
+                    "https://youtu.be/..."
+                )
+                self.url_text.setMinimumSize(400, 200)
+                self.viewLayout.addWidget(self.url_text)
+                
+                self.yesButton.setText("İndir")
+                self.cancelButton.setText("İptal")
+                
+            def get_urls(self):
+                text = self.url_text.toPlainText()
+                urls = []
+                for line in text.strip().split('\n'):
+                    line = line.strip()
+                    if line and is_valid_url(line):
+                        urls.append(line)
+                return urls
+        
+        dialog = BatchDownloadDialog(self.window())
+        if dialog.exec():
+            urls = dialog.get_urls()
+            if urls:
+                self.process_batch_urls(urls)
+            else:
+                InfoBar.warning(
+                    title="Uyarı",
+                    content="Geçerli URL bulunamadı!",
+                    duration=3000,
+                    parent=self
+                )
+                
+    def process_batch_urls(self, urls: list):
+        """Toplu URL'leri sıraya ekle"""
+        path = self.path_input.text()
+        type_idx = self.type_combo.currentIndex()
+        type_str = 'video' if type_idx == 0 else 'audio'
+        save_meta = self.meta_check.isChecked()
+        write_sub = self.subs_check.isChecked()
+        
+        main_window = self.window()
+        if hasattr(main_window, 'start_download_process'):
+            count = 0
+            for url in urls:
+                main_window.start_download_process(url, path, 'best', type_str, save_meta, write_sub)
+                count += 1
+            
+            InfoBar.success(
+                title='Toplu İndirme Başlatıldı',
+                content=f"{count} video sıraya eklendi.",
+                duration=4000,
+                parent=self
+            )
             
     def on_type_changed(self, index):
         is_video = (index == 0)
         self.quality_combo.setEnabled(is_video)
+        # Video kesme sadece video için
+        self.trim_check.setEnabled(is_video)
+        if not is_video:
+            self.trim_check.setChecked(False)
+            
+    def on_trim_toggled(self, checked):
+        """Video kesme checkbox değiştiğinde"""
+        self.start_time_input.setEnabled(checked)
+        self.end_time_input.setEnabled(checked)
         
     def start_download(self):
         url = self.url_input.text()
@@ -482,9 +654,19 @@ class HomeInterface(ScrollArea):
         write_sub = self.subs_check.isChecked()
         type_str = 'video' if type_idx == 0 else 'audio'
         
+        # Gelişmiş seçenekler
+        normalize_audio = self.normalize_check.isChecked()
+        start_time = self.start_time_input.text().strip() if self.trim_check.isChecked() else None
+        end_time = self.end_time_input.text().strip() if self.trim_check.isChecked() else None
+        
         main_window = self.window()
         if hasattr(main_window, 'start_download_process'):
-            main_window.start_download_process(url, path, format_id, type_str, save_meta, write_sub)
+            main_window.start_download_process(
+                url, path, format_id, type_str, save_meta, write_sub,
+                normalize_audio=normalize_audio,
+                start_time=start_time,
+                end_time=end_time
+            )
             InfoBar.success(title='Sıraya Alındı', content="İndirme başladı.", duration=3000, parent=self)
             self.url_input.clear()
             self.video_info_card.reset_info()
@@ -1080,7 +1262,8 @@ class DownloadWorker(QThread):
     cancelled_signal = pyqtSignal()
     
     def __init__(self, downloader, url, output_dir, format_id=None, is_audio=False, 
-                 save_metadata=False, ratelimit=None, proxy=None, write_sub=False):
+                 save_metadata=False, ratelimit=None, proxy=None, write_sub=False,
+                 normalize_audio=False, start_time=None, end_time=None):
         super().__init__()
         self.downloader = downloader
         self.url = url
@@ -1091,6 +1274,9 @@ class DownloadWorker(QThread):
         self.ratelimit = ratelimit
         self.proxy = proxy
         self.write_sub = write_sub
+        self.normalize_audio = normalize_audio
+        self.start_time = start_time
+        self.end_time = end_time
         self.final_filename = None
         self.download_task = None
         self._cancelled = False
@@ -1143,7 +1329,8 @@ class DownloadWorker(QThread):
                 progress_callback=self.progress_callback, 
                 complete_callback=self.complete_callback, 
                 save_info=self.save_metadata, 
-                ratelimit=self.ratelimit
+                ratelimit=self.ratelimit,
+                normalize_audio=self.normalize_audio
             )
         else:
             # Yeni API kullan - DownloadTask döner
@@ -1153,10 +1340,12 @@ class DownloadWorker(QThread):
                 format_id=self.format_id, 
                 progress_callback=self.progress_callback, 
                 complete_callback=self.complete_callback, 
-                cancel_callback=self.is_cancelled,  # İptal kontrolü
+                cancel_callback=self.is_cancelled,
                 save_info=self.save_metadata, 
                 ratelimit=self.ratelimit, 
-                write_sub=self.write_sub
+                write_sub=self.write_sub,
+                start_time=self.start_time,
+                end_time=self.end_time
             )
 
 class MainWindow(FluentWindow):
@@ -1368,14 +1557,20 @@ class MainWindow(FluentWindow):
                     task['processed'] = True
                     InfoBar.info(title='Zamanlayıcı', content=f"İndirme başladı: {task['args'][0]}", position=InfoBarPosition.TOP_RIGHT, parent=self)
 
-    def start_download_process(self, url, path, format_id, type_str, save_meta):
+    def start_download_process(self, url, path, format_id, type_str, save_meta, 
+                                write_sub=False, normalize_audio=False, 
+                                start_time=None, end_time=None):
         """İndirme işlemini başlat"""
         card = self.queue_interface.add_download_item("İndirme Başlatılıyor...", url)
         is_audio = (type_str == 'audio')
         ratelimit = self.settings_interface.get_speed_limit()
         
         # Worker oluştur
-        worker = DownloadWorker(self.downloader, url, path, format_id, is_audio, save_meta, ratelimit)
+        worker = DownloadWorker(
+            self.downloader, url, path, format_id, is_audio, save_meta, ratelimit,
+            write_sub=write_sub, normalize_audio=normalize_audio,
+            start_time=start_time, end_time=end_time
+        )
         
         # Sinyalleri bağla
         worker.progress_signal.connect(lambda d: self.update_download_card(card, d))
