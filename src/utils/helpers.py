@@ -230,39 +230,37 @@ def check_ffmpeg() -> bool:
     return get_ffmpeg_path() is not None
 
 def extract_video_thumbnail(video_path: str, output_path: str) -> bool:
-    """Videodan küçük resim oluşturur"""
+    """Videodan küçük resim oluşturur. Ses-only dosyalar için False döner."""
     ffmpeg_dir = get_ffmpeg_path()
-    
-    # Eğer yerel FFmpeg varsa tam yolunu oluştur, yoksa sistemdekini ('ffmpeg') kullan
     if ffmpeg_dir:
         ffmpeg_cmd = os.path.join(ffmpeg_dir, 'ffmpeg.exe' if platform.system() == 'Windows' else 'ffmpeg')
     else:
         ffmpeg_cmd = 'ffmpeg'
-        
-    try:
-        # Videonun 5. saniyesinden bir kare al
-        cmd = [
-            ffmpeg_cmd,
-            '-y', # Varsa üzerine yaz
-            '-ss', '00:00:05', # 5. saniye
-            '-i', video_path,
-            '-vframes', '1', # Tek kare
-            '-vf', 'scale=320:-1', # Genişlik 320px, yükseklik orantılı
-            '-q:v', '2', # Kalite
-            output_path
-        ]
-        
-        subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == 'Windows' else 0,
-            check=True # Hata varsa exception fırlat
-        )
-        return os.path.exists(output_path)
-    except Exception as e:
-        print(f"Thumbnail hatası ({ffmpeg_cmd}): {e}")
-        return False
+
+    flags = subprocess.CREATE_NO_WINDOW if platform.system() == 'Windows' else 0
+    base_args = [ffmpeg_cmd, '-y', '-i', video_path, '-vframes', '1', '-vf', 'scale=320:-1', '-q:v', '2']
+
+    # 5. saniyeden dene, başarısız olursa ilk kareyi al
+    attempts = [
+        base_args[:2] + ['-ss', '00:00:05'] + base_args[2:] + [output_path],
+        base_args + [output_path],
+    ]
+
+    for cmd in attempts:
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=flags,
+                timeout=20,
+            )
+            if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                return True
+        except Exception:
+            pass
+
+    return False
 
 def get_clipboard_text() -> Optional[str]:
     """Panodan metni alır"""

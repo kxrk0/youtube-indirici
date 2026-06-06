@@ -72,7 +72,7 @@ class Downloader:
         """Video hakkında bilgi alır"""
         try:
             print(f"Video bilgisi alınıyor: {url}")
-            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': False}) as ydl:
+            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
                 info = ydl.extract_info(url, download=False)
                 if info:
                     print(f"Video başlığı: {info.get('title')}")
@@ -92,7 +92,7 @@ class Downloader:
         """Playlist videolarını hızlıca listeler (flat)"""
         try:
             opts = {
-                'extract_flat': True, # Video detaylarına girme, sadece listeyi al
+                'extract_flat': True,
                 'quiet': True,
                 'no_warnings': True,
             }
@@ -478,14 +478,16 @@ class Downloader:
                 
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # info çekerek dosya adını al
                     info = ydl.extract_info(url, download=True)
                     filename = ydl.prepare_filename(info)
                     final_filename = os.path.splitext(filename)[0] + ".mp3"
-                    
-                    # Metadata Göm
+
+                    # Doğru nihai dosya yolunu DownloadWorker'a bildir
+                    if progress_callback:
+                        progress_callback({'status': 'finished', 'filename': final_filename})
+
                     embed_metadata(final_filename, info)
-                    
+
                 if complete_callback:
                     complete_callback(True)
             except Exception as e:

@@ -47,12 +47,32 @@ if not exist venv\ (
 :: Sanal ortamı aktifleştirme
 call venv\Scripts\activate.bat
 
-:: Bağımlılıkları kurma
-echo Bagimliliklar kuruluyor...
-pip install -r requirements.txt
-if %errorlevel% neq 0 (
-    echo pip hatasi, dogrudan deneniyor...
-    %PYTHON_CMD% -m pip install -r requirements.txt
+:: Bağımlılıkları kurma (sadece yeni/değişen paketlerde)
+:: requirements.txt güncellenirse marker'ı sıfırla
+if exist venv\.deps_ok (
+    for /f %%A in ('powershell -NoProfile -Command "(Get-Item venv\.deps_ok).LastWriteTime -lt (Get-Item requirements.txt).LastWriteTime"') do (
+        if "%%A"=="True" (
+            echo requirements.txt guncellendi, bagimliliklar yeniden kurulacak...
+            del venv\.deps_ok
+        )
+    )
+)
+if exist venv\.deps_ok (
+    echo Bagimliliklar zaten kurulu, atlaniyor.
+) else (
+    echo Bagimliliklar kuruluyor...
+    pip install -r requirements.txt -q
+    if %errorlevel% neq 0 (
+        pip install -r requirements.txt
+    )
+    if %errorlevel% equ 0 (
+        echo. > venv\.deps_ok
+        echo Bagimliliklar basariyla kuruldu.
+    ) else (
+        echo HATA: Bagimliliklar kurulamadi!
+        pause
+        exit /b 1
+    )
 )
 
 :: FFmpeg kontrolü ve otomatik indirme

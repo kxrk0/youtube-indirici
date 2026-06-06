@@ -59,7 +59,8 @@ class InfoFetchWorker(QThread):
         else:
             is_playlist = False
             info = self.downloader.get_video_info(self.url)
-            formats = self.downloader.get_available_formats(self.url) if info else []
+            # Formatları aynı info dict'ten al — ikinci API çağrısı yok
+            formats = info.get('formats', []) if info else []
         self.info_ready.emit(info or {}, formats, is_playlist)
 
 

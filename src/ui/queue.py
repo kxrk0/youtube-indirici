@@ -113,7 +113,18 @@ class DownloadItemCard(CardWidget):
         self.open_folder_btn.setEnabled(True)
         self.play_btn.setEnabled(True)
         if filepath:
-            self.file_path = filepath
+            # Gerçek dosyayı doğrula; post-process sonrası uzantı değişmiş olabilir
+            if os.path.exists(filepath):
+                self.file_path = filepath
+            else:
+                base = os.path.splitext(filepath)[0]
+                for ext in ('.mp3', '.mp4', '.webm', '.mkv', '.m4a'):
+                    candidate = base + ext
+                    if os.path.exists(candidate):
+                        self.file_path = candidate
+                        break
+                else:
+                    self.file_path = filepath  # en azından klasörü bulabilelim
 
     def set_error(self, error_msg: str):
         self.progress.hide()
@@ -139,15 +150,35 @@ class DownloadItemCard(CardWidget):
 
     def open_folder(self):
         path = self.file_path or get_os_download_dir()
+        # Dosya yoksa (örn. geçici webm silindi) → indirme klasörünü aç
         if os.path.isfile(path):
             path = os.path.dirname(path)
+        elif not os.path.isdir(path):
+            path = get_os_download_dir()
         if platform.system() == 'Windows':
-            os.startfile(path)
+            try:
+                os.startfile(path)
+            except Exception:
+                os.startfile(get_os_download_dir())
 
     def open_file(self):
-        if self.file_path and os.path.exists(self.file_path):
-            if platform.system() == 'Windows':
-                os.startfile(self.file_path)
+        if not self.file_path:
+            return
+        target = self.file_path
+        # Uzantı farklı olabilir (webm→mp3), aynı base ile ara
+        if not os.path.exists(target):
+            base = os.path.splitext(target)[0]
+            for ext in ('.mp3', '.mp4', '.webm', '.mkv', '.m4a'):
+                candidate = base + ext
+                if os.path.exists(candidate):
+                    target = candidate
+                    self.file_path = candidate  # güncelle
+                    break
+        if os.path.exists(target) and platform.system() == 'Windows':
+            try:
+                os.startfile(target)
+            except Exception:
+                pass
 
 
 class QueueInterface(ScrollArea):
