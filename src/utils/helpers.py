@@ -69,9 +69,34 @@ def get_animation_speed_factor() -> float:
     return 60.0 / rate
 
 def is_valid_url(url: str) -> bool:
-    """URL'nin YouTube url'si olup olmadığını kontrol eder"""
-    youtube_regex = r'^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?$'
-    return bool(re.match(youtube_regex, url))
+    """Desteklenen bir platform URL'si mi kontrol eder (YouTube, Shorts, Vimeo, Twitter/X, Dailymotion)"""
+    if not url or not url.strip():
+        return False
+    url = url.strip()
+    if not url.startswith(('http://', 'https://')):
+        return False
+    supported = (
+        r'(youtube\.com|youtu\.be)',
+        r'vimeo\.com',
+        r'(twitter\.com|x\.com)',
+        r'dailymotion\.com',
+    )
+    return any(re.search(p, url) for p in supported)
+
+
+def detect_platform(url: str) -> str:
+    """URL'den platform adını döndür"""
+    if not url:
+        return 'unknown'
+    if 'youtube.com' in url or 'youtu.be' in url:
+        return 'youtube_shorts' if '/shorts/' in url else 'youtube'
+    if 'vimeo.com' in url:
+        return 'vimeo'
+    if 'twitter.com' in url or 'x.com' in url:
+        return 'twitter'
+    if 'dailymotion.com' in url:
+        return 'dailymotion'
+    return 'unknown'
 
 def format_size(bytes_size: int) -> str:
     """Byte cinsinden dosya boyutunu okunaklı hale getirir"""
@@ -114,33 +139,38 @@ def get_os_download_dir() -> str:
     else:
         return os.getcwd()  # Varsayılan olarak mevcut dizin
 
-def setup_ffmpeg_path():
-    """Yerel FFmpeg dizinini sistem PATH değişkenine ekler"""
+def _find_ffmpeg_bin_dir() -> Optional[str]:
+    """Proje kök dizininde herhangi bir ffmpeg*/bin dizinini dinamik olarak arar."""
+    import glob
     current_dir = os.path.dirname(os.path.abspath(__file__))
     root_dir = os.path.dirname(os.path.dirname(current_dir))
-    
-    ffmpeg_bin_dir = os.path.join(root_dir, 'ffmpeg-8.0.1-essentials_build', 'bin')
-    
-    if os.path.exists(ffmpeg_bin_dir):
-        # Mevcut PATH'e ekle (en başa)
+    exe_name = 'ffmpeg.exe' if platform.system() == 'Windows' else 'ffmpeg'
+
+    # Önce sabit isim dene, sonra wildcard
+    candidates = [
+        os.path.join(root_dir, 'ffmpeg', 'bin'),
+        os.path.join(root_dir, 'ffmpeg-bin'),
+    ] + glob.glob(os.path.join(root_dir, 'ffmpeg*', 'bin'))
+
+    for candidate in candidates:
+        if os.path.exists(os.path.join(candidate, exe_name)):
+            return candidate
+    return None
+
+
+def setup_ffmpeg_path():
+    """Yerel FFmpeg dizinini sistem PATH değişkenine ekler"""
+    ffmpeg_bin_dir = _find_ffmpeg_bin_dir()
+    if ffmpeg_bin_dir:
         os.environ["PATH"] = ffmpeg_bin_dir + os.pathsep + os.environ["PATH"]
         print(f"FFmpeg PATH'e eklendi: {ffmpeg_bin_dir}")
         return True
     return False
 
+
 def get_ffmpeg_path() -> Optional[str]:
-    """Yerel FFmpeg dizinini döndürür (varsa)"""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.dirname(os.path.dirname(current_dir))
-    
-    # ffmpeg-8.0.1-essentials_build/bin
-    local_ffmpeg_dir = os.path.join(root_dir, 'ffmpeg-8.0.1-essentials_build', 'bin')
-    local_ffmpeg_exe = os.path.join(local_ffmpeg_dir, 'ffmpeg.exe' if platform.system() == 'Windows' else 'ffmpeg')
-    
-    if os.path.exists(local_ffmpeg_exe):
-        return local_ffmpeg_dir # yt-dlp dizin yolu ister
-        
-    return None
+    """Yerel FFmpeg bin dizinini döndürür (yt-dlp dizin yolu ister)"""
+    return _find_ffmpeg_bin_dir()
 
 def embed_metadata(file_path: str, info: dict):
     """MP3 dosyasına meta verileri ve kapak fotoğrafını gömer"""

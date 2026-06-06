@@ -106,5 +106,27 @@
         "videos_added": "Videos hinzugefügt",
         "download_started": "Download gestartet",
         "scheduler": "Planer"
+    },
+
+    "live": {
+        "badge": "🔴 LIVESTREAM",
+        "record_btn": "Aufnahme starten",
+        "recording": "Aufnahme läuft...",
+        "stopped": "Aufnahme gestoppt",
+        "completed": "Aufnahme abgeschlossen"
+    },
+
+    "platform": {
+        "youtube": "YouTube",
+        "youtube_shorts": "YouTube Shorts",
+        "vimeo": "Vimeo",
+        "twitter": "Twitter / X",
+        "dailymotion": "Dailymotion",
+        "unknown": "Unbekannte Plattform"
+    },
+
+    "advanced": {
+        "custom_ffmpeg_title": "Benutzerdefinierte FFmpeg-Argumente",
+        "custom_ffmpeg_placeholder": "Bsp.: -vf scale=1280:720"
     }
 }

@@ -6,11 +6,49 @@ Supports high refresh rate monitors (60Hz - 240Hz+).
 """
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QScrollArea, QWidget, QScroller, QScrollerProperties, QApplication
+from PyQt6.QtWidgets import QScrollArea, QWidget, QScroller, QScrollerProperties, QApplication, QFrame
 from PyQt6.QtGui import QPainter
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 
 from src.utils.helpers import get_monitor_refresh_rate, get_optimal_timer_interval
+
+
+def setup_smooth_scroll(scroll_area, enable_kinetic: bool = True):
+    """GPU-optimized smooth scrolling'i scroll_area'ya ekler."""
+    refresh_rate = get_monitor_refresh_rate()
+
+    scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+    scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+    viewport = scroll_area.viewport()
+    if viewport:
+        viewport.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
+
+    vbar = scroll_area.verticalScrollBar()
+    if vbar:
+        step = max(15, int(100 / (refresh_rate / 60)))
+        vbar.setSingleStep(step)
+
+    if enable_kinetic:
+        try:
+            scroller = QScroller.scroller(scroll_area.viewport())
+            props = scroller.scrollerProperties()
+            decel = 0.988 if refresh_rate >= 144 else 0.982 if refresh_rate >= 120 else 0.975
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.DecelerationFactor, decel)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.MinimumVelocity, 0.1)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.MaximumVelocity, 0.8)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.OvershootDragResistanceFactor, 0.35)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.OvershootScrollDistanceFactor, 0.15)
+            scroller.setScrollerProperties(props)
+            QScroller.grabGesture(
+                scroll_area.viewport(),
+                QScroller.ScrollerGestureType.LeftMouseButtonGesture
+            )
+        except Exception as e:
+            print(f"Kinetic scroll error: {e}")
+
+    return scroll_area
 
 
 class GPUAcceleratedViewport(QOpenGLWidget):

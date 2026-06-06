@@ -14,7 +14,7 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
 # Uygulama sürümü
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
 
 # GitHub repo bilgileri
 GITHUB_OWNER = "kxrk0"
@@ -114,7 +114,8 @@ def check_for_updates() -> Optional[UpdateInfo]:
         return update_info
         
     except HTTPError as e:
-        print(f"Güncelleme kontrolü HTTP hatası: {e.code}")
+        if e.code != 404:
+            print(f"Güncelleme kontrolü HTTP hatası: {e.code}")
         return None
     except URLError as e:
         print(f"Güncelleme kontrolü ağ hatası: {e.reason}")

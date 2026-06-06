@@ -119,5 +119,27 @@
     "videos_added": "video eklendi",
     "download_started": "İndirme başladı",
     "scheduler": "Zamanlayıcı"
+  },
+
+  "live": {
+    "badge": "🔴 CANLI YAYIN",
+    "record_btn": "Kaydı Başlat",
+    "recording": "Kaydediliyor...",
+    "stopped": "Kayıt Durduruldu",
+    "completed": "Kayıt Tamamlandı"
+  },
+
+  "platform": {
+    "youtube": "YouTube",
+    "youtube_shorts": "YouTube Shorts",
+    "vimeo": "Vimeo",
+    "twitter": "Twitter / X",
+    "dailymotion": "Dailymotion",
+    "unknown": "Bilinmeyen Platform"
+  },
+
+  "advanced": {
+    "custom_ffmpeg_title": "Özel FFmpeg Argümanları",
+    "custom_ffmpeg_placeholder": "Örn: -vf scale=1280:720"
   }
 }

@@ -138,7 +138,9 @@ class Downloader:
                       write_sub: bool = False,
                       sub_langs: str = 'tr,en',
                       start_time: str = None,
-                      end_time: str = None) -> DownloadTask:
+                      end_time: str = None,
+                      proxy: Optional[str] = None,
+                      custom_ffmpeg_args: Optional[str] = None) -> DownloadTask:
         """
         Video indirir
         
@@ -253,7 +255,16 @@ class Downloader:
             
             if ratelimit:
                 ydl_opts['ratelimit'] = ratelimit
-            
+
+            if proxy:
+                ydl_opts['proxy'] = proxy
+
+            if custom_ffmpeg_args:
+                ydl_opts['postprocessor_args'] = {
+                    'merger': custom_ffmpeg_args.split(),
+                    'default': custom_ffmpeg_args.split(),
+                }
+
             # Video kesme (trim) desteği
             if start_time or end_time:
                 # yt-dlp'nin download_ranges özelliğini kullan
@@ -323,8 +334,15 @@ class Downloader:
             self.is_downloading = False
             if task.task_id in self.active_tasks:
                 del self.active_tasks[task.task_id]
-    
-    def _save_to_history(self, url: str, task, status: str, format_quality: str, 
+
+        thread = threading.Thread(target=_download_with_retry)
+        thread.daemon = True
+        thread.start()
+
+        self.current_task = task
+        return task
+
+    def _save_to_history(self, url: str, task, status: str, format_quality: str,
                         format_type: str, error_message: str = None):
         """İndirmeyi geçmişe kaydet"""
         try:
@@ -383,16 +401,8 @@ class Downloader:
             pass
         
         return 0
-        
-        # Thread'de başlat
-        thread = threading.Thread(target=_download_with_retry)
-        thread.daemon = True
-        thread.start()
-        
-        self.current_task = task
-        return task
-    
-    def download_audio(self, 
+
+    def download_audio(self,
                       url: str, 
                       output_path: str, 
                       audio_quality: str = '0',  # En yüksek kalite
@@ -401,7 +411,9 @@ class Downloader:
                       save_info: bool = False,
                       ratelimit: Optional[str] = None,
                       normalize_audio: bool = False,
-                      target_loudness: float = -16.0) -> None:
+                      target_loudness: float = -16.0,
+                      proxy: Optional[str] = None,
+                      custom_ffmpeg_args: Optional[str] = None) -> None:
         """
         Sadece ses indirir (MP3 formatında)
         
@@ -446,7 +458,15 @@ class Downloader:
             
             if ratelimit:
                 ydl_opts['ratelimit'] = ratelimit
-            
+
+            if proxy:
+                ydl_opts['proxy'] = proxy
+
+            if custom_ffmpeg_args:
+                ydl_opts['postprocessor_args'] = {
+                    'default': custom_ffmpeg_args.split(),
+                }
+
             # FFmpeg konumunu ekle (varsa)
             ffmpeg_path = get_ffmpeg_path()
             if ffmpeg_path:
@@ -512,7 +532,101 @@ class Downloader:
             task.cancel()
             print(f"İndirme iptal edildi: {task_id}")
         self.active_tasks.clear()
-        
+
+    def download_livestream(self,
+                           url: str,
+                           output_path: str,
+                           progress_callback: Optional[Callable] = None,
+                           complete_callback: Optional[Callable] = None,
+                           proxy: Optional[str] = None) -> DownloadTask:
+        """
+        Canlı yayın kaydeder.
+        İndirme baştan başlar (live_from_start=True).
+        """
+        task = DownloadTask(url, output_path)
+        self.active_tasks[task.task_id] = task
+
+        def _record():
+            self.is_downloading = True
+            task.status = DOWNLOAD_STATUS_DOWNLOADING
+
+            ydl_opts = {
+                'format': 'bestvideo+bestaudio/best',
+                'outtmpl': os.path.join(output_path, '%(title)s.%(ext)s'),
+                'merge_output_format': 'mp4',
+                'live_from_start': True,
+                'wait_for_video': (0, 120),
+                'concurrent_fragment_downloads': 4,
+                'socket_timeout': 30,
+                'retries': 10,
+                'fragment_retries': 10,
+                'quiet': True,
+                'no_warnings': False,
+                'progress_hooks': [_progress_hook],
+            }
+
+            if proxy:
+                ydl_opts['proxy'] = proxy
+
+            ffmpeg_path = get_ffmpeg_path()
+            if ffmpeg_path:
+                ydl_opts['ffmpeg_location'] = ffmpeg_path
+
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+                task.status = DOWNLOAD_STATUS_COMPLETED
+                self._save_to_history(url, task, 'completed', 'live', 'video')
+                if complete_callback:
+                    complete_callback(True)
+            except Exception as e:
+                err = str(e)
+                if 'iptal' in err.lower() or task.is_cancelled():
+                    task.status = DOWNLOAD_STATUS_CANCELLED
+                    self._save_to_history(url, task, 'cancelled', 'live', 'video')
+                    if complete_callback:
+                        complete_callback(False, "Kayıt iptal edildi")
+                else:
+                    task.status = DOWNLOAD_STATUS_ERROR
+                    task.error = err
+                    self._save_to_history(url, task, 'error', 'live', 'video', err)
+                    if complete_callback:
+                        complete_callback(False, err)
+            finally:
+                self.is_downloading = False
+                if task.task_id in self.active_tasks:
+                    del self.active_tasks[task.task_id]
+
+        def _progress_hook(d):
+            if task.is_cancelled():
+                raise Exception("Kayıt iptal edildi")
+            if d['status'] == 'downloading':
+                downloaded = d.get('downloaded_bytes', 0)
+                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                fragment_index = d.get('fragment_index')
+                fragment_count = d.get('fragment_count')
+                if fragment_count and fragment_index:
+                    task.progress = int((fragment_index / fragment_count) * 100)
+                elif total > 0:
+                    task.progress = int((downloaded / total) * 100)
+                task.speed = d.get('speed', 0) or 0
+                if progress_callback:
+                    progress_callback({
+                        'downloaded_bytes': downloaded,
+                        'total_bytes': total,
+                        'speed': task.speed,
+                        'filename': d.get('filename', ''),
+                        'status': 'recording',
+                        'progress': task.progress,
+                    })
+
+        thread = threading.Thread(target=_record)
+        thread.daemon = True
+        thread.start()
+
+        self.current_task = task
+        return task
+
     def get_active_downloads(self) -> List[DownloadTask]:
         """Aktif indirme görevlerini döndürür"""
         return list(self.active_tasks.values())

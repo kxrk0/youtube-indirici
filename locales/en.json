@@ -106,5 +106,27 @@
         "videos_added": "videos added",
         "download_started": "Download started",
         "scheduler": "Scheduler"
+    },
+
+    "live": {
+        "badge": "🔴 LIVE STREAM",
+        "record_btn": "Start Recording",
+        "recording": "Recording...",
+        "stopped": "Recording Stopped",
+        "completed": "Recording Complete"
+    },
+
+    "platform": {
+        "youtube": "YouTube",
+        "youtube_shorts": "YouTube Shorts",
+        "vimeo": "Vimeo",
+        "twitter": "Twitter / X",
+        "dailymotion": "Dailymotion",
+        "unknown": "Unknown Platform"
+    },
+
+    "advanced": {
+        "custom_ffmpeg_title": "Custom FFmpeg Arguments",
+        "custom_ffmpeg_placeholder": "E.g.: -vf scale=1280:720"
     }
 }
