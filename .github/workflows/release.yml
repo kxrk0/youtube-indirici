@@ -2,8 +2,10 @@ name: Build & Release
 
 on:
   push:
-    tags:
-      - 'v*'   # v2.4.0, v3.0.0, vs.
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
 
 permissions:
   contents: write
@@ -15,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Python kur
         uses: actions/setup-python@v5
@@ -28,35 +32,55 @@ jobs:
           pip install pyinstaller
           pip install -r requirements.txt
 
-      - name: APP_VERSION güncelle
+      - name: Versiyon oku
+        id: version
         shell: python
         run: |
           import re, os
-          tag = os.environ["GITHUB_REF_NAME"]          # örn. v2.4.0
-          version = tag.lstrip("v")                    # 2.4.0
-          path = "src/utils/updater.py"
-          text = open(path, encoding="utf-8").read()
-          text = re.sub(r'APP_VERSION\s*=\s*"[^"]+"',
-                        f'APP_VERSION = "{version}"', text)
-          open(path, "w", encoding="utf-8").write(text)
-          print(f"APP_VERSION → {version}")
+          text = open("src/utils/updater.py", encoding="utf-8").read()
+          m = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', text)
+          version = m.group(1) if m else "0.0.0"
+          tag = f"v{version}"
+          print(f"VERSION={version}")
+          print(f"TAG={tag}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"version={version}\n")
+              f.write(f"tag={tag}\n")
+
+      - name: Tag zaten var mı kontrol et
+        id: tag_check
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git tag -l "$TAG" | grep -q "$TAG"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG zaten mevcut, build atlanıyor."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $TAG yeni, build basliyor."
+          fi
 
       - name: PyInstaller ile EXE derle
+        if: steps.tag_check.outputs.exists == 'false'
         run: |
           pyinstaller youtube_indirici.spec --noconfirm
 
       - name: ZIP oluştur
+        if: steps.tag_check.outputs.exists == 'false'
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ steps.version.outputs.tag }}"
           Compress-Archive -Path "dist\YouTubeIndirici" `
                            -DestinationPath "YouTubeIndirici-${tag}.zip" -Force
           $size = [math]::Round((Get-Item "YouTubeIndirici-${tag}.zip").Length / 1MB, 1)
           Write-Output "ZIP: YouTubeIndirici-${tag}.zip ($size MB)"
 
       - name: GitHub Release oluştur & yükle
+        if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          files: YouTubeIndirici-${{ github.ref_name }}.zip
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          files: YouTubeIndirici-${{ steps.version.outputs.tag }}.zip
           generate_release_notes: true
           fail_on_unmatched_files: true
