@@ -616,6 +616,22 @@ class MainWindow(FluentWindow):
             except Exception:
                 pass
             self.history_interface.is_loaded = False
+            # Şarkı sözleri — ses indirmelerinde otomatik .lrc kaydet
+            if filepath and type_str == 'audio' and (meta_title or meta_channel):
+                def _fetch_lrc(fp=filepath, t=meta_title or display_title,
+                               a=meta_channel or '', d=int(meta_duration or 0)):
+                    try:
+                        from src.core.lyrics import save_lrc
+                        lrc = save_lrc(fp, t, a, d)
+                        if lrc:
+                            QTimer.singleShot(0, lambda: InfoBar.info(
+                                title='Sözler Kaydedildi',
+                                content=f'{os.path.basename(lrc)}',
+                                duration=3000, parent=self
+                            ))
+                    except Exception as _le:
+                        print(f"[Lyrics] {_le}")
+                threading.Thread(target=_fetch_lrc, daemon=True).start()
             # Webhook gönder
             self._send_webhook(url=url, title=meta_title or display_title,
                                filepath=filepath, success=True)

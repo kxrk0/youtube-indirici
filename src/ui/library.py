@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from qfluentwidgets import (
-    ScrollArea, CardWidget, TitleLabel, BodyLabel, PushButton,
+    ScrollArea, CardWidget, TitleLabel, SubtitleLabel, BodyLabel, PushButton,
     FluentIcon, TransparentToolButton, FlowLayout, InfoBar,
     SearchLineEdit, ComboBox
 )
@@ -329,6 +329,113 @@ class _MetadataEditorDialog(QDialog):
                           duration=4000, parent=self.window())
 
 
+class _FormatConverterCard(CardWidget):
+    """Dosya sürükle-bırak + format seçimi ile dönüştürme paneli."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self._worker = None
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(20, 14, 20, 14)
+        lay.setSpacing(14)
+
+        # İkon
+        icon_lbl = QLabel(self)
+        icon_lbl.setPixmap(FluentIcon.DEVELOPER_TOOLS.icon().pixmap(32, 32))
+        lay.addWidget(icon_lbl)
+
+        # Başlık + açıklama
+        txt_col = QVBoxLayout()
+        txt_col.setSpacing(2)
+        self._title_lbl = SubtitleLabel("Format Dönüştür", self)
+        self._desc_lbl = BodyLabel("Dosyayı buraya sürükleyin veya seçin → MP3 / MP4 / MKV / WebM", self)
+        self._desc_lbl.setStyleSheet("color: #888;")
+        txt_col.addWidget(self._title_lbl)
+        txt_col.addWidget(self._desc_lbl)
+        lay.addLayout(txt_col, stretch=1)
+
+        # Format seçici
+        self._fmt_combo = ComboBox(self)
+        self._fmt_combo.addItems(["MP3", "MP4", "MKV", "WebM", "WAV", "AAC"])
+        self._fmt_combo.setFixedWidth(90)
+        lay.addWidget(self._fmt_combo)
+
+        # Dosya seç butonu
+        self._browse_btn = PushButton(FluentIcon.FOLDER, "Dosya Seç", self)
+        self._browse_btn.setFixedWidth(110)
+        self._browse_btn.clicked.connect(self._browse)
+        lay.addWidget(self._browse_btn)
+
+        # Dönüştür butonu
+        self._convert_btn = PushButton(FluentIcon.PLAY, "Dönüştür", self)
+        self._convert_btn.setFixedWidth(100)
+        self._convert_btn.setEnabled(False)
+        self._convert_btn.clicked.connect(self._start_convert)
+        lay.addWidget(self._convert_btn)
+
+        self._selected_file = ''
+
+    def _browse(self):
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Dosya Seç", "",
+            "Medya Dosyaları (*.mp4 *.mp3 *.mkv *.webm *.avi *.mov *.wav *.m4a *.ogg *.flac *.opus)"
+        )
+        if path:
+            self._set_file(path)
+
+    def _set_file(self, path: str):
+        self._selected_file = path
+        name = os.path.basename(path)
+        self._desc_lbl.setText(f"Seçili: {name}")
+        self._desc_lbl.setStyleSheet("color: #0078D4; font-weight: bold;")
+        self._convert_btn.setEnabled(True)
+
+    def _start_convert(self):
+        if not self._selected_file or not os.path.exists(self._selected_file):
+            return
+        if self._worker and self._worker.isRunning():
+            return
+        fmt = self._fmt_combo.currentText().lower()
+        self._convert_btn.setEnabled(False)
+        self._desc_lbl.setText("Dönüştürülüyor…")
+        self._desc_lbl.setStyleSheet("color: #f0a020; font-weight: bold;")
+
+        self._worker = FormatConverterWorker(self._selected_file, fmt)
+        self._worker.completed_signal.connect(self._on_done)
+        self._worker.start()
+
+    def _on_done(self, success: bool, result: str):
+        self._convert_btn.setEnabled(True)
+        if success:
+            self._desc_lbl.setText(f"✓ Tamamlandı: {os.path.basename(result)}")
+            self._desc_lbl.setStyleSheet("color: #00cc6a; font-weight: bold;")
+            InfoBar.success(title="Dönüştürme Tamamlandı",
+                            content=os.path.basename(result), duration=4000, parent=self.window())
+        else:
+            self._desc_lbl.setText("✗ Hata! Dosyayı tekrar seçin.")
+            self._desc_lbl.setStyleSheet("color: #e81123; font-weight: bold;")
+            InfoBar.error(title="Dönüştürme Hatası", content=result[:120],
+                          duration=5000, parent=self.window())
+
+    # ─── Drag & Drop ──────────────────────────────────────────────────────────
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if urls:
+            path = urls[0].toLocalFile()
+            if os.path.isfile(path):
+                self._set_file(path)
+                event.acceptProposedAction()
+
+
 class LibraryInterface(ScrollArea):
     """Kütüphane sayfası"""
 
@@ -356,6 +463,10 @@ class LibraryInterface(ScrollArea):
         header.addStretch()
         header.addWidget(self.refresh_btn)
         self.v_layout.addLayout(header)
+
+        # ─── Format Dönüştürücü Paneli ────────────────────────────────────────
+        self.converter_card = _FormatConverterCard(self.view)
+        self.v_layout.addWidget(self.converter_card)
 
         # Arama ve filtre satırı
         filter_row = QHBoxLayout()

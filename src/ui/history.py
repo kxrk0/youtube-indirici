@@ -191,6 +191,10 @@ class HistoryInterface(ScrollArea):
         self.export_btn.clicked.connect(self.export_csv)
         header.addWidget(self.export_btn)
 
+        self.export_json_btn = PushButton(FluentIcon.DOCUMENT, "JSON Dışa Aktar", self.view)
+        self.export_json_btn.clicked.connect(self.export_json)
+        header.addWidget(self.export_json_btn)
+
         self.integrity_btn = PushButton(FluentIcon.SEARCH, "Bütünlük Kontrolü", self.view)
         self.integrity_btn.setToolTip("İndirilen dosyaların diskten hâlâ erişilebilir olup olmadığını kontrol eder")
         self.integrity_btn.clicked.connect(self._check_file_integrity)
@@ -388,6 +392,28 @@ class HistoryInterface(ScrollArea):
             InfoBar.success(title="CSV", content=f"Dışa aktarıldı: {os.path.basename(path)}", duration=4000, parent=self)
         except Exception as e:
             InfoBar.error(title="CSV Hatası", content=str(e)[:120], duration=5000, parent=self)
+
+    def export_json(self):
+        """Mevcut geçmişi JSON dosyasına aktar"""
+        if not self._current_rows:
+            InfoBar.warning(title="JSON", content="Dışa aktarılacak kayıt yok.", duration=3000, parent=self)
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "JSON Kaydet", os.path.join(os.path.expanduser('~'), 'indirme_gecmisi.json'),
+            "JSON Dosyası (*.json)"
+        )
+        if not path:
+            return
+        try:
+            import json
+            fields = ['id', 'title', 'channel', 'url', 'format_type',
+                      'file_path', 'file_size', 'duration', 'status', 'download_date']
+            rows = [{k: row.get(k) for k in fields} for row in self._current_rows]
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(rows, f, ensure_ascii=False, indent=2)
+            InfoBar.success(title="JSON", content=f"Dışa aktarıldı: {os.path.basename(path)}", duration=4000, parent=self)
+        except Exception as e:
+            InfoBar.error(title="JSON Hatası", content=str(e)[:120], duration=5000, parent=self)
 
     def _check_file_integrity(self):
         """Tamamlanan kayıtlardaki dosya yollarını diskten kontrol et."""

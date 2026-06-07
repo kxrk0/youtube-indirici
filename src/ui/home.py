@@ -135,9 +135,10 @@ class HomeInterface(ScrollArea):
         input_row = QHBoxLayout()
 
         self.url_input = LineEdit(self.view)
-        self.url_input.setPlaceholderText("YouTube, SoundCloud, TikTok, Instagram, Twitter/X, Vimeo, Spotify, Twitch...")
+        self.url_input.setPlaceholderText("YouTube, SoundCloud, TikTok, Instagram, Twitter/X, Vimeo, Spotify, Twitch... (Birden fazla URL yapıştırın → otomatik toplu mod)")
         self.url_input.setClearButtonEnabled(True)
         self.url_input.textChanged.connect(self.on_url_changed)
+        self.url_input.textChanged.connect(self._detect_multi_url_paste)
 
         self.paste_btn = PushButton(FluentIcon.PASTE, "Yapıştır", self.view)
         self.paste_btn.clicked.connect(self.paste_from_clipboard)
@@ -286,6 +287,29 @@ class HomeInterface(ScrollArea):
     def _is_spotify_url(url: str) -> bool:
         return 'open.spotify.com' in url
 
+    @staticmethod
+    def _is_channel_url(url: str) -> bool:
+        import re
+        return bool(re.search(
+            r'youtube\.com/(@[\w.-]+|channel/[\w-]+|c/[\w-]+|user/[\w-]+)\s*/?(\?.*)?$', url
+        ))
+
+    def _detect_multi_url_paste(self, text: str):
+        """Çoklu URL yapıştırılırsa otomatik toplu mod aç."""
+        if '\n' not in text:
+            return
+        from src.utils.helpers import is_valid_url as _iv
+        lines = [l.strip() for l in text.split('\n') if l.strip()]
+        valid = [l for l in lines if _iv(l)]
+        if len(valid) >= 2:
+            # Input temizle, batch dialog aç
+            self.url_input.blockSignals(True)
+            self.url_input.clear()
+            self.url_input.blockSignals(False)
+            # Pre-fill the dialog's text area
+            self._pending_batch_urls = '\n'.join(valid)
+            self.show_batch_dialog()
+
     def on_url_changed(self, text):
         # Non-Spotify DRM platformları: hemen hata göster
         if is_valid_url(text) and self._is_drm_url(text):
@@ -335,6 +359,12 @@ class HomeInterface(ScrollArea):
             self.worker = SpotifyInfoWorker(url)
             self.worker.info_ready.connect(self.on_info_ready)
             self.worker.start()
+            return
+
+        # YouTube Kanal URL'si: kanal video listesi dialog
+        if self._is_channel_url(url):
+            self.skeleton_card.hide()
+            self._show_channel_download_dialog(url)
             return
 
         # URL cache — aynı URL'yi tekrar fetch etme
@@ -582,6 +612,10 @@ class HomeInterface(ScrollArea):
                 return urls
 
         dialog = BatchDownloadDialog(self.window())
+        # Önceden doldurulmuş URL varsa yerleştir
+        if hasattr(self, '_pending_batch_urls') and self._pending_batch_urls:
+            dialog.url_text.setPlainText(self._pending_batch_urls)
+            self._pending_batch_urls = ''
         if dialog.exec():
             urls = dialog.get_urls()
             if urls:
@@ -618,6 +652,127 @@ class HomeInterface(ScrollArea):
                 content=msg,
                 duration=4000, parent=self
             )
+
+    # ─── Kanal İndirme ───────────────────────────────────────────────────────
+
+    def _show_channel_download_dialog(self, channel_url: str):
+        """Kanal videolarını listeler, seçilenleri indirir."""
+        from PyQt6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QListWidget,
+            QListWidgetItem, QDialogButtonBox, QProgressDialog
+        )
+        from PyQt6.QtCore import Qt, QThread
+        from qfluentwidgets import SubtitleLabel, BodyLabel, PushButton as PB, CheckBox as CB
+
+        # Önce video listesini al
+        fetch_dlg = QProgressDialog("Kanal videoları alınıyor…", "İptal", 0, 0, self.window())
+        fetch_dlg.setWindowTitle("Kanal")
+        fetch_dlg.setMinimumDuration(0)
+        fetch_dlg.setValue(0)
+        fetch_dlg.show()
+
+        videos = []
+        error_msg = ['']
+
+        class _FetchWorker(QThread):
+            def __init__(self, url):
+                super().__init__()
+                self.url = url
+            def run(self):
+                try:
+                    import yt_dlp
+                    opts = {
+                        'extract_flat': 'in_playlist',
+                        'quiet': True,
+                        'no_warnings': True,
+                        'playlist_end': 100,
+                    }
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(self.url, download=False)
+                        if info:
+                            entries = info.get('entries') or []
+                            for e in entries:
+                                if e and e.get('url') or e.get('id'):
+                                    vid_url = e.get('url') or f"https://youtube.com/watch?v={e['id']}"
+                                    videos.append({'url': vid_url, 'title': e.get('title', vid_url)})
+                except Exception as ex:
+                    error_msg[0] = str(ex)
+
+        worker = _FetchWorker(channel_url)
+        worker.finished.connect(fetch_dlg.close)
+
+        def _on_done():
+            fetch_dlg.close()
+            if error_msg[0]:
+                InfoBar.error(title='Kanal Hatası', content=error_msg[0][:120], duration=5000, parent=self)
+                return
+            if not videos:
+                InfoBar.warning(title='Kanal', content='Video bulunamadı.', duration=4000, parent=self)
+                return
+            # Seçim dialogu
+            dlg = QDialog(self.window())
+            dlg.setWindowTitle(f"Kanal İndirme — {len(videos)} video")
+            dlg.resize(520, 520)
+            lay = QVBoxLayout(dlg)
+
+            lay.addWidget(SubtitleLabel(f"{len(videos)} video bulundu"))
+            lay.addWidget(BodyLabel("İndirmek istediklerini seç:"))
+
+            # Tümünü seç
+            sel_row = QHBoxLayout()
+            sel_all = PB(FluentIcon.COMPLETED, "Tümünü Seç", dlg)
+            sel_none = PB(FluentIcon.CLOSE, "Seçimi Kaldır", dlg)
+            sel_row.addWidget(sel_all)
+            sel_row.addWidget(sel_none)
+            sel_row.addStretch()
+            lay.addLayout(sel_row)
+
+            lst = QListWidget(dlg)
+            lst.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+            for v in videos:
+                item = QListWidgetItem(v['title'])
+                item.setData(Qt.ItemDataRole.UserRole, v['url'])
+                lst.addItem(item)
+            lay.addWidget(lst)
+
+            sel_all.clicked.connect(lst.selectAll)
+            sel_none.clicked.connect(lst.clearSelection)
+
+            # Tür seçimi
+            type_row = QHBoxLayout()
+            type_row.addWidget(BodyLabel("Tür:"))
+            audio_cb = CB("Ses (MP3)", dlg)
+            type_row.addWidget(audio_cb)
+            type_row.addStretch()
+            lay.addLayout(type_row)
+
+            btns = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, dlg
+            )
+            btns.accepted.connect(dlg.accept)
+            btns.rejected.connect(dlg.reject)
+            lay.addWidget(btns)
+
+            if dlg.exec():
+                selected = [lst.item(i).data(Qt.ItemDataRole.UserRole)
+                            for i in range(lst.count())
+                            if lst.item(i).isSelected()]
+                if selected:
+                    type_str = 'audio' if audio_cb.isChecked() else 'video'
+                    path = self.path_input.text()
+                    main_window = self.window()
+                    for u in selected:
+                        main_window.start_download_process(u, path, 'best', type_str, False)
+                    InfoBar.success(
+                        title='Kanal İndirme',
+                        content=f"{len(selected)} video sıraya eklendi.",
+                        duration=4000, parent=self
+                    )
+                    self.url_input.clear()
+
+        worker.finished.connect(_on_done)
+        worker.start()
+        self._channel_worker = worker  # GC'den koru
 
     def on_type_changed(self, index):
         is_video = (index == 0)
