@@ -32,11 +32,12 @@ class VideoInfoCard(CardWidget):
         self.thumb_label.setFixedSize(160, 90)
         self.thumb_label.setStyleSheet("background-color: #2d2d2d; border-radius: 8px;")
         self.thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.thumb_label.setScaledContents(True) # Resmi sığdır
+        self.thumb_label.setScaledContents(False)  # Manuel scale — aspect ratio koru
         
         # Varsayılan İkon
         self.default_icon = FluentIcon.VIDEO.icon().pixmap(48, 48)
         self.thumb_label.setPixmap(self.default_icon)
+        self._is_square_thumb = False
         
         self.h_layout.addWidget(self.thumb_label)
         
@@ -61,17 +62,24 @@ class VideoInfoCard(CardWidget):
 
     def update_info(self, info):
         self.title_lbl.setText(info.get('title', 'Bilinmiyor'))
-        self.channel_lbl.setText(info.get('uploader', 'Bilinmiyor'))
-        
+        self.channel_lbl.setText(info.get('uploader') or info.get('channel') or 'Bilinmiyor')
+
         duration = info.get('duration')
         if duration:
             self.duration_lbl.setText(f"Süre: {format_duration(duration)}")
-            
-        # Thumbnail İndir
+        elif info.get('is_spotify'):
+            self.duration_lbl.setText("🎵 Spotify Müziği")
+            self.duration_lbl.setStyleSheet("color: #1DB954; font-weight: bold;")
+        else:
+            self.duration_lbl.setText("Süre: --:--")
+            self.duration_lbl.setStyleSheet("color: gray;")
+
+        # Thumbnail indir
         thumbnail_url = info.get('thumbnail')
         if thumbnail_url:
+            self._is_square_thumb = info.get('is_spotify', False)
             self.nam.get(QNetworkRequest(QUrl(thumbnail_url)))
-            
+
         # Animasyonu Başlat
         self.start_entrance_animation()
 
@@ -80,7 +88,14 @@ class VideoInfoCard(CardWidget):
             data = reply.readAll()
             pixmap = QPixmap()
             pixmap.loadFromData(data)
-            self.thumb_label.setPixmap(pixmap)
+            if not pixmap.isNull():
+                w, h = self.thumb_label.width(), self.thumb_label.height()
+                scaled = pixmap.scaled(
+                    w, h,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.thumb_label.setPixmap(scaled)
         reply.deleteLater()
         
     def reset_info(self):
@@ -88,7 +103,9 @@ class VideoInfoCard(CardWidget):
         self.title_lbl.setText("Video Başlığı Bekleniyor...")
         self.channel_lbl.setText("Kanal Adı")
         self.duration_lbl.setText("Süre: --:--")
+        self.duration_lbl.setStyleSheet("color: gray;")
         self.thumb_label.setPixmap(self.default_icon)
+        self._is_square_thumb = False
         self.hide()
 
     def _calculate_animation_duration(self, base_duration_ms: int) -> int:

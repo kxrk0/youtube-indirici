@@ -14,7 +14,7 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
 # Uygulama sürümü
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 
 # GitHub repo bilgileri
 GITHUB_OWNER = "kxrk0"
