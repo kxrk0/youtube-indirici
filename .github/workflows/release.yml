@@ -1,0 +1,62 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'   # v2.4.0, v3.0.0, vs.
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Bağımlılıkları yükle
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: APP_VERSION güncelle
+        shell: python
+        run: |
+          import re, os
+          tag = os.environ["GITHUB_REF_NAME"]          # örn. v2.4.0
+          version = tag.lstrip("v")                    # 2.4.0
+          path = "src/utils/updater.py"
+          text = open(path, encoding="utf-8").read()
+          text = re.sub(r'APP_VERSION\s*=\s*"[^"]+"',
+                        f'APP_VERSION = "{version}"', text)
+          open(path, "w", encoding="utf-8").write(text)
+          print(f"APP_VERSION → {version}")
+
+      - name: PyInstaller ile EXE derle
+        run: |
+          pyinstaller youtube_indirici.spec --noconfirm
+
+      - name: ZIP oluştur
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          Compress-Archive -Path "dist\YouTubeIndirici" `
+                           -DestinationPath "YouTubeIndirici-${tag}.zip" -Force
+          $size = [math]::Round((Get-Item "YouTubeIndirici-${tag}.zip").Length / 1MB, 1)
+          Write-Output "ZIP: YouTubeIndirici-${tag}.zip ($size MB)"
+
+      - name: GitHub Release oluştur & yükle
+        uses: softprops/action-gh-release@v2
+        with:
+          files: YouTubeIndirici-${{ github.ref_name }}.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
