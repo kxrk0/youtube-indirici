@@ -24,6 +24,23 @@ _SSL_CTX.verify_mode    = ssl.CERT_NONE
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 _OEMBED_URL = 'https://open.spotify.com/oembed'
 
+
+def _normalize_spotify_url(url: str) -> str:
+    """
+    Spotify URL'sini temizle:
+      - intl-XX/ locale prefix kaldır  (intl-tr, intl-en, ...)
+      - ?si=... tracking parametresi kaldır
+    Örnek: open.spotify.com/intl-tr/track/ABC?si=XYZ → open.spotify.com/track/ABC
+    """
+    # locale prefix: /intl-XX/
+    url = re.sub(r'(open\.spotify\.com)/intl-[a-z]{2}/', r'\1/', url)
+    # si= tracking param
+    if '?' in url:
+        base, query = url.split('?', 1)
+        params = [p for p in query.split('&') if not p.startswith('si=')]
+        url = base + ('?' + '&'.join(params) if params else '')
+    return url
+
 _HEADERS = {
     'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                        '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -44,7 +61,8 @@ def _http_get_json(url: str, params: dict = None, timeout: int = 15) -> Optional
         return None
 
 
-def get_track_info(spotify_url: str) -> Optional[Dict]:
+def get_track_info(spotify_url: str, _original_url: str = None) -> Optional[Dict]:
+    spotify_url = _normalize_spotify_url(spotify_url)
     """
     Spotify oEmbed ile şarkı başlığı, sanatçı ve kapak resmi alır.
     Auth gerektirmez. Döndürdüğü dict VideoInfoCard.update_info() ile uyumludur.
@@ -121,6 +139,8 @@ def download_track(spotify_url: str,
     Döndürür: MP3 dosya yolu veya None.
     """
     import yt_dlp
+
+    spotify_url = _normalize_spotify_url(spotify_url)
 
     # 1. Metadata al
     track_info = get_track_info(spotify_url)

@@ -167,16 +167,6 @@ class HomeInterface(ScrollArea):
         self.options_layout.setSpacing(15)
         self.options_layout.addWidget(SubtitleLabel("İndirme Ayarları", self.view))
 
-        # Profil seçici
-        profile_row = QHBoxLayout()
-        self.profile_combo = ComboBox(self.view)
-        self._load_profiles()
-        self.profile_combo.currentIndexChanged.connect(self._apply_profile)
-        profile_row.addWidget(StrongBodyLabel("Profil:", self.view))
-        profile_row.addWidget(self.profile_combo)
-        profile_row.addStretch()
-        self.options_layout.addLayout(profile_row)
-
         opts_row1 = QHBoxLayout()
         self.type_combo = ComboBox(self.view)
         self.type_combo.addItems(["Video (MP4/WebM)", "Ses (MP3)"])
@@ -512,43 +502,6 @@ class HomeInterface(ScrollArea):
         if 'vp8' in v:
             return "VP8"
         return vcodec[:8] if len(vcodec) > 8 else vcodec
-
-    # ─── Profil Sistemi ───────────────────────────────────────────────────────
-
-    def _load_profiles(self):
-        try:
-            from src.core.profiles import profile_names
-            names = profile_names()
-        except Exception:
-            names = []
-        self.profile_combo.clear()
-        self.profile_combo.addItem("— Profil Seç —")
-        for n in names:
-            self.profile_combo.addItem(n)
-
-    def _apply_profile(self, idx: int):
-        if idx <= 0:
-            return
-        name = self.profile_combo.currentText()
-        try:
-            from src.core.profiles import get_profile
-            p = get_profile(name)
-            if not p:
-                return
-            # type
-            if p.get('type_str') == 'audio':
-                self.type_combo.setCurrentIndex(1)
-            else:
-                self.type_combo.setCurrentIndex(0)
-            # sponsorblock
-            if hasattr(self, 'sponsorblock_check'):
-                self.sponsorblock_check.setChecked(bool(p.get('sponsorblock', False)))
-            # normalize
-            if hasattr(self, 'normalize_check'):
-                self.normalize_check.setChecked(bool(p.get('normalize_audio', False)))
-            InfoBar.success(title='Profil Uygulandı', content=name, duration=2000, parent=self)
-        except Exception as e:
-            print(f"[Profile] {e}")
 
     # ─── Disk Boyutu Tahmini ──────────────────────────────────────────────────
 
