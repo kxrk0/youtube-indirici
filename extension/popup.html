@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YDL İndirici</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 320px;
+      min-height: 200px;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+    }
+    .header {
+      background: linear-gradient(135deg, #0078d4, #005fa3);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .header .version {
+      font-size: 10px;
+      color: rgba(255,255,255,0.65);
+      margin-top: 2px;
+    }
+    .status-bar {
+      padding: 8px 16px;
+      background: #16213e;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot.online  { background: #4caf50; }
+    .dot.offline { background: #f44336; }
+    .url-section { padding: 14px 16px 8px; }
+    .url-section label {
+      font-size: 11px;
+      color: #aaa;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .url-row { display: flex; gap: 6px; }
+    input[type="text"] {
+      flex: 1;
+      background: #0f3460;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      color: #e0e0e0;
+      padding: 6px 10px;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus { border-color: #0078d4; }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      transition: opacity 0.2s;
+    }
+    button:hover { opacity: 0.85; }
+    button:active { opacity: 0.7; }
+    .btn-paste {
+      background: #0f3460;
+      color: #aac8ff;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .options { padding: 8px 16px; display: flex; gap: 8px; }
+    select {
+      flex: 1;
+      background: #0f3460;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      color: #e0e0e0;
+      padding: 5px 8px;
+      font-size: 12px;
+      outline: none;
+    }
+    .btn-download {
+      background: #0078d4;
+      color: #fff;
+      padding: 8px 18px;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .download-row { padding: 0 16px 14px; display: flex; gap: 8px; }
+    .btn-open-app {
+      flex: 1;
+      background: #16213e;
+      color: #aaa;
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 7px;
+      font-size: 11px;
+    }
+    .divider { border: none; border-top: 1px solid rgba(255,255,255,0.06); margin: 0 16px; }
+    #msg {
+      padding: 8px 16px 12px;
+      font-size: 11.5px;
+      min-height: 30px;
+      line-height: 1.4;
+    }
+    .msg-ok  { color: #81c784; }
+    .msg-err { color: #ef9a9a; }
+    .msg-info{ color: #90caf9; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>🎬 YDL İndirici</h1>
+      <div class="version">v2.1 — Universal Downloader</div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="dot offline" id="statusDot"></span>
+    <span id="statusText">Bağlantı kontrol ediliyor...</span>
+  </div>
+
+  <div class="url-section">
+    <label>İndirilecek URL</label>
+    <div class="url-row">
+      <input type="text" id="urlInput" placeholder="https://..." />
+      <button class="btn-paste" id="pasteBtn" title="Panodan Yapıştır">📋</button>
+    </div>
+  </div>
+
+  <div class="options">
+    <select id="typeSelect">
+      <option value="video">🎥 Video</option>
+      <option value="audio" selected>🎵 Ses (MP3)</option>
+    </select>
+    <select id="qualitySelect">
+      <option value="best">En İyi Kalite</option>
+      <option value="1080">1080p</option>
+      <option value="720">720p</option>
+      <option value="480">480p</option>
+    </select>
+  </div>
+
+  <div class="download-row">
+    <button class="btn-download" id="downloadBtn">⬇ İndir</button>
+    <button class="btn-open-app" id="openAppBtn">🖥 Masaüstü Uygulaması</button>
+  </div>
+
+  <hr class="divider">
+  <div id="msg" class="msg-info">URL girin veya panodan yapıştırın.</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

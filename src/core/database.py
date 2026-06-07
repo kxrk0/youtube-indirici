@@ -77,6 +77,62 @@ class DownloadHistory:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_download_date ON downloads(download_date)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_status ON downloads(status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_url ON downloads(url)')
+
+            # Abonelikler tablosu (kanal/playlist otomatik takip)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL UNIQUE,
+                    name TEXT,
+                    type TEXT DEFAULT 'channel',
+                    format_type TEXT DEFAULT 'video',
+                    output_path TEXT,
+                    check_interval_hours INTEGER DEFAULT 6,
+                    last_checked TIMESTAMP,
+                    last_new_count INTEGER DEFAULT 0,
+                    active INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Kalıcı kuyruk tablosu (uygulama kapanınca bekleyen indirmeler)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS queue_state (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    title TEXT,
+                    output_path TEXT,
+                    format_id TEXT DEFAULT 'best',
+                    type_str TEXT DEFAULT 'video',
+                    thumbnail_url TEXT,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Platform istatistikleri view'i
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS platform_stats (
+                    platform TEXT PRIMARY KEY,
+                    count INTEGER DEFAULT 0,
+                    total_bytes INTEGER DEFAULT 0,
+                    last_download TIMESTAMP
+                )
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    output_path TEXT,
+                    format_id TEXT,
+                    type_str TEXT DEFAULT 'video',
+                    schedule_time TEXT NOT NULL,
+                    repeat_daily INTEGER DEFAULT 0,
+                    last_run TIMESTAMP,
+                    active INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             
     def add_download(self, 
                      url: str, 
@@ -243,6 +299,147 @@ class DownloadHistory:
                 LIMIT ?
             ''', (limit,))
             return [row[0] for row in cursor.fetchall()]
+
+
+    # ── Abonelikler ─────────────────────────────────────────────────────────
+
+    def add_subscription(self, url: str, name: str = None, type_: str = 'channel',
+                         format_type: str = 'video', output_path: str = None,
+                         check_interval_hours: int = 6) -> int:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO subscriptions
+                (url, name, type, format_type, output_path, check_interval_hours)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (url, name, type_, format_type, output_path, check_interval_hours))
+            return cursor.lastrowid
+
+    def get_subscriptions(self, active_only: bool = True) -> List[Dict]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            q = 'SELECT * FROM subscriptions'
+            if active_only:
+                q += ' WHERE active = 1'
+            q += ' ORDER BY created_at DESC'
+            cursor.execute(q)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def update_subscription_checked(self, sub_id: int, new_count: int = 0):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE subscriptions SET last_checked = CURRENT_TIMESTAMP,
+                last_new_count = ? WHERE id = ?
+            ''', (new_count, sub_id))
+
+    def delete_subscription(self, sub_id: int):
+        with self._get_connection() as conn:
+            conn.cursor().execute('DELETE FROM subscriptions WHERE id = ?', (sub_id,))
+
+    # ── Kuyruk Durumu ────────────────────────────────────────────────────────
+
+    def save_queue_item(self, url: str, title: str = None, output_path: str = None,
+                        format_id: str = 'best', type_str: str = 'video',
+                        thumbnail_url: str = None) -> int:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO queue_state (url, title, output_path, format_id, type_str, thumbnail_url)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (url, title, output_path, format_id, type_str, thumbnail_url))
+            return cursor.lastrowid
+
+    def get_saved_queue(self) -> List[Dict]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM queue_state ORDER BY added_at ASC')
+            return [dict(row) for row in cursor.fetchall()]
+
+    def clear_queue_state(self):
+        with self._get_connection() as conn:
+            conn.cursor().execute('DELETE FROM queue_state')
+
+    def remove_queue_item(self, item_id: int):
+        with self._get_connection() as conn:
+            conn.cursor().execute('DELETE FROM queue_state WHERE id = ?', (item_id,))
+
+    # ── Platform İstatistikleri ──────────────────────────────────────────────
+
+    def get_platform_breakdown(self) -> List[Dict]:
+        """Her platformdan kaç indirme yapıldı."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT
+                    CASE
+                        WHEN url LIKE '%youtube.com%' OR url LIKE '%youtu.be%' THEN 'YouTube'
+                        WHEN url LIKE '%music.youtube.com%' THEN 'YouTube Music'
+                        WHEN url LIKE '%soundcloud.com%' THEN 'SoundCloud'
+                        WHEN url LIKE '%spotify.com%' THEN 'Spotify'
+                        WHEN url LIKE '%tiktok.com%' THEN 'TikTok'
+                        WHEN url LIKE '%instagram.com%' THEN 'Instagram'
+                        WHEN url LIKE '%twitter.com%' OR url LIKE '%x.com%' THEN 'Twitter/X'
+                        WHEN url LIKE '%vimeo.com%' THEN 'Vimeo'
+                        WHEN url LIKE '%twitch.tv%' THEN 'Twitch'
+                        WHEN url LIKE '%reddit.com%' THEN 'Reddit'
+                        ELSE 'Diğer'
+                    END as platform,
+                    COUNT(*) as count,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as ok,
+                    SUM(COALESCE(file_size, 0)) as total_bytes
+                FROM downloads
+                GROUP BY platform
+                ORDER BY count DESC
+            ''')
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_daily_downloads(self, days: int = 30) -> List[Dict]:
+        """Son N günlük günlük indirme sayısı."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT date(download_date) as day, COUNT(*) as count
+                FROM downloads
+                WHERE download_date >= date('now', ?)
+                GROUP BY day ORDER BY day ASC
+            ''', (f'-{days} days',))
+            return [dict(row) for row in cursor.fetchall()]
+
+
+    # ─── Scheduled Tasks ────────────────────────────────────────────────────
+    def add_scheduled_task(self, name: str, url: str, schedule_time: str,
+                           output_path: str = '', format_id: str = 'best',
+                           type_str: str = 'video', repeat_daily: bool = False) -> int:
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                '''INSERT INTO scheduled_tasks (name, url, output_path, format_id, type_str, schedule_time, repeat_daily)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (name, url, output_path, format_id, type_str, schedule_time, int(repeat_daily))
+            )
+            return cur.lastrowid
+
+    def get_scheduled_tasks(self) -> List[Dict]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                'SELECT * FROM scheduled_tasks WHERE active=1 ORDER BY schedule_time'
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_scheduled_task_run(self, task_id: int):
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE scheduled_tasks SET last_run=CURRENT_TIMESTAMP WHERE id=?",
+                (task_id,)
+            )
+
+    def delete_scheduled_task(self, task_id: int):
+        with self._get_connection() as conn:
+            conn.execute('DELETE FROM scheduled_tasks WHERE id=?', (task_id,))
+
+    def set_scheduled_task_active(self, task_id: int, active: bool):
+        with self._get_connection() as conn:
+            conn.execute('UPDATE scheduled_tasks SET active=? WHERE id=?', (int(active), task_id))
 
 
 # Global instance

@@ -72,7 +72,8 @@ class DownloadWorker(QThread):
     def __init__(self, downloader, url, output_dir, format_id=None, is_audio=False,
                  save_metadata=False, ratelimit=None, proxy=None, write_sub=False,
                  normalize_audio=False, start_time=None, end_time=None,
-                 is_live=False, custom_ffmpeg_args=None, semaphore=None):
+                 is_live=False, custom_ffmpeg_args=None, semaphore=None,
+                 filename_template=None, sponsorblock=False):
         super().__init__()
         self.downloader = downloader
         self.url = url
@@ -89,6 +90,8 @@ class DownloadWorker(QThread):
         self.is_live = is_live
         self.custom_ffmpeg_args = custom_ffmpeg_args
         self.semaphore = semaphore
+        self.filename_template = filename_template
+        self.sponsorblock = sponsorblock
         self.final_filename = None
         self.download_task = None
         self._cancelled = False
@@ -140,6 +143,20 @@ class DownloadWorker(QThread):
             if self.semaphore:
                 self.semaphore.release()
 
+    def _resolve_proxy(self) -> Optional[str]:
+        """Return proxy to use: explicit proxy > pool rotation > None."""
+        if self.proxy:
+            return self.proxy
+        try:
+            from src.core.config import get_config
+            pool = [p.strip() for p in get_config().get('proxy_pool', '').splitlines() if p.strip()]
+            if pool:
+                import random
+                return random.choice(pool)
+        except Exception:
+            pass
+        return None
+
     def _do_download(self):
         # Shorts için dikey format düzeltmesi
         if (detect_platform(self.url) == 'youtube_shorts'
@@ -147,39 +164,70 @@ class DownloadWorker(QThread):
                 and (not self.format_id or self.format_id == 'best')):
             self.format_id = 'bestvideo[width<=720]+bestaudio/best'
 
-        if self.is_live:
-            self.download_task = self.downloader.download_livestream(
-                self.url, self.output_dir,
-                progress_callback=self.progress_callback,
-                complete_callback=self.complete_callback,
-                proxy=self.proxy,
-            )
-        elif self.is_audio:
-            self.downloader.download_audio(
-                self.url, self.output_dir,
-                progress_callback=self.progress_callback,
-                complete_callback=self.complete_callback,
-                save_info=self.save_metadata,
-                ratelimit=self.ratelimit,
-                normalize_audio=self.normalize_audio,
-                proxy=self.proxy,
-                custom_ffmpeg_args=self.custom_ffmpeg_args,
-            )
-        else:
-            self.download_task = self.downloader.download_video(
-                self.url, self.output_dir,
-                format_id=self.format_id,
-                progress_callback=self.progress_callback,
-                complete_callback=self.complete_callback,
-                cancel_callback=self.is_cancelled_flag,
-                save_info=self.save_metadata,
-                ratelimit=self.ratelimit,
-                write_sub=self.write_sub,
-                start_time=self.start_time,
-                end_time=self.end_time,
-                proxy=self.proxy,
-                custom_ffmpeg_args=self.custom_ffmpeg_args,
-            )
+        effective_proxy = self._resolve_proxy()
+        _MAX_RETRIES = 3
+        last_exc = None
+
+        for attempt in range(_MAX_RETRIES):
+            if self._cancelled:
+                break
+            # On retry pick a different proxy from pool
+            if attempt > 0:
+                try:
+                    from src.core.config import get_config
+                    pool = [p.strip() for p in get_config().get('proxy_pool', '').splitlines() if p.strip()]
+                    if pool:
+                        import random
+                        effective_proxy = random.choice(pool)
+                except Exception:
+                    pass
+
+            try:
+                if self.is_live:
+                    self.download_task = self.downloader.download_livestream(
+                        self.url, self.output_dir,
+                        progress_callback=self.progress_callback,
+                        complete_callback=self.complete_callback,
+                        proxy=effective_proxy,
+                    )
+                elif self.is_audio:
+                    self.downloader.download_audio(
+                        self.url, self.output_dir,
+                        progress_callback=self.progress_callback,
+                        complete_callback=self.complete_callback,
+                        save_info=self.save_metadata,
+                        ratelimit=self.ratelimit,
+                        normalize_audio=self.normalize_audio,
+                        proxy=effective_proxy,
+                        custom_ffmpeg_args=self.custom_ffmpeg_args,
+                        filename_template=self.filename_template,
+                    )
+                else:
+                    self.download_task = self.downloader.download_video(
+                        self.url, self.output_dir,
+                        format_id=self.format_id,
+                        progress_callback=self.progress_callback,
+                        complete_callback=self.complete_callback,
+                        cancel_callback=self.is_cancelled_flag,
+                        save_info=self.save_metadata,
+                        ratelimit=self.ratelimit,
+                        write_sub=self.write_sub,
+                        start_time=self.start_time,
+                        end_time=self.end_time,
+                        proxy=effective_proxy,
+                        custom_ffmpeg_args=self.custom_ffmpeg_args,
+                        filename_template=self.filename_template,
+                        sponsorblock=self.sponsorblock,
+                    )
+                return  # success
+            except Exception as e:
+                last_exc = e
+                if attempt < _MAX_RETRIES - 1:
+                    self.msleep(1500 * (attempt + 1))
+                    continue
+                # All retries exhausted
+                self.complete_callback(False, str(last_exc))
+                return
 
 
 class FormatConverterWorker(QThread):
@@ -229,3 +277,145 @@ class FormatConverterWorker(QThread):
                 self.completed_signal.emit(False, err)
         except Exception as e:
             self.completed_signal.emit(False, str(e))
+
+
+class SpotifyInfoWorker(QThread):
+    """Spotify oEmbed üzerinden şarkı meta verisi alır (auth gerekmez)"""
+    info_ready = pyqtSignal(dict, list, bool)
+
+    def __init__(self, url: str):
+        super().__init__()
+        self.url = url
+
+    def run(self):
+        try:
+            from src.core.spotify_downloader import get_track_info
+            info = get_track_info(self.url)
+            self.info_ready.emit(info or {}, [], False)
+        except Exception as e:
+            print(f"SpotifyInfoWorker error: {e}")
+            self.info_ready.emit({}, [], False)
+
+
+class SpotifyDownloadWorker(QThread):
+    """spotidownloader.com API üzerinden Spotify şarkısı indirir"""
+    progress_signal   = pyqtSignal(dict)
+    completed_signal  = pyqtSignal(bool, str, str)
+    cancelled_signal  = pyqtSignal()
+
+    def __init__(self, url: str, output_dir: str, semaphore=None):
+        super().__init__()
+        self.url        = url
+        self.output_dir = output_dir
+        self.semaphore  = semaphore
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+        self.cancelled_signal.emit()
+
+    def _cancel_flag(self) -> bool:
+        return self._cancelled
+
+    def run(self):
+        if self.semaphore:
+            self.semaphore.acquire()
+        try:
+            self._do_download()
+        finally:
+            if self.semaphore:
+                self.semaphore.release()
+
+    def _do_download(self):
+        from src.core.spotify_downloader import download_track
+
+        def progress_cb(pct: int, downloaded: int, total: int):
+            if self._cancelled:
+                return
+            self.progress_signal.emit({
+                'status':           'downloading',
+                'progress':         pct,
+                'downloaded_bytes': downloaded,
+                'total_bytes':      total,
+                'speed':            0,
+                'eta':              0,
+                'filename':         '',
+            })
+
+        try:
+            filepath = download_track(
+                self.url,
+                self.output_dir,
+                progress_callback=progress_cb,
+                cancel_flag=self._cancel_flag,
+            )
+            if self._cancelled:
+                self.completed_signal.emit(False, "İndirme iptal edildi", "")
+            elif filepath:
+                self.progress_signal.emit({'status': 'processing', 'filename': filepath})
+                self.completed_signal.emit(True, "", filepath)
+            else:
+                self.completed_signal.emit(False, "Spotify indirme başarısız — dosya oluşturulamadı", "")
+        except Exception as e:
+            self.completed_signal.emit(False, str(e), "")
+
+
+class ThumbnailUrlWorker(QThread):
+    """Uzak URL'den thumbnail bytes indirir"""
+    loaded = pyqtSignal(bytes)
+
+    def __init__(self, url: str):
+        super().__init__()
+        self._url = url
+
+    def run(self):
+        try:
+            import ssl
+            import urllib.request
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode    = ssl.CERT_NONE
+            req = urllib.request.Request(
+                self._url,
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+                data = resp.read()
+            if data:
+                self.loaded.emit(data)
+        except Exception:
+            pass
+
+
+class WhisperWorker(QThread):
+    """Whisper AI ile ses/video dosyasından transkript oluşturur."""
+    progress_signal  = pyqtSignal(str)    # log line
+    finished_signal  = pyqtSignal(str)    # transcript text
+    error_signal     = pyqtSignal(str)    # error message
+
+    def __init__(self, file_path: str, model: str = 'base', language: str = 'tr', parent=None):
+        super().__init__(parent)
+        self._file_path = file_path
+        self._model     = model
+        self._language  = language
+
+    def run(self):
+        try:
+            self.progress_signal.emit("Whisper modeli yükleniyor…")
+            import whisper  # type: ignore
+            model = whisper.load_model(self._model)
+            self.progress_signal.emit(f"Transkript oluşturuluyor: {os.path.basename(self._file_path)}")
+            result = model.transcribe(self._file_path, language=self._language, verbose=False)
+            text = result.get('text', '').strip()
+            # Save alongside source file
+            out_path = os.path.splitext(self._file_path)[0] + '.txt'
+            with open(out_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            self.finished_signal.emit(out_path)
+        except ImportError:
+            self.error_signal.emit(
+                "openai-whisper kurulu değil.\n"
+                "Kur: pip install openai-whisper"
+            )
+        except Exception as e:
+            self.error_signal.emit(str(e))

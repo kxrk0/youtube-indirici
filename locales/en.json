@@ -128,5 +128,115 @@
     "advanced": {
         "custom_ffmpeg_title": "Custom FFmpeg Arguments",
         "custom_ffmpeg_placeholder": "E.g.: -vf scale=1280:720"
+    },
+
+    "history": {
+        "title": "Download History",
+        "integrity_check": "Integrity Check",
+        "clear_history": "Clear History",
+        "platform_breakdown": "Platform Breakdown",
+        "total_downloads": "Total Downloads",
+        "search_placeholder": "Search title or URL..."
+    },
+
+    "profiles": {
+        "title": "Download Profile",
+        "select": "Select Profile",
+        "youtube_1080p": "YouTube 1080p",
+        "music_mp3": "Music MP3",
+        "tiktok_shorts": "TikTok/Shorts",
+        "podcast": "Podcast",
+        "4k": "4K Ultra HD",
+        "480p": "480p Economy"
+    },
+
+    "delta_sync": {
+        "label": "Delta Sync — download only new videos",
+        "skipped": "Delta Sync: already downloaded, skipped.",
+        "batch_skipped": "Delta Sync: {count} URLs already downloaded, skipped."
+    },
+
+    "disk_estimate": {
+        "estimating": "Estimating size…",
+        "result": "Estimated: {size}",
+        "low_space": "⚠ Low disk space! Estimated: {size}, Free: {free}",
+        "unavailable": "Size estimation unavailable"
+    },
+
+    "whisper": {
+        "dialog_title": "Create Transcript — Whisper AI",
+        "start": "▶ Start",
+        "save_txt": "💾 Save TXT",
+        "model_label": "Model",
+        "lang_label": "Language",
+        "not_installed": "openai-whisper not installed.\nInstall: pip install openai-whisper",
+        "saved": "✅ Saved: {path}",
+        "error": "❌ Error: {msg}"
+    },
+
+    "scheduler": {
+        "dialog_title": "Scheduled Tasks",
+        "add": "➕ Add",
+        "delete": "🗑 Delete Selected",
+        "col_name": "Name",
+        "col_url": "URL",
+        "col_time": "Time",
+        "col_repeat": "Repeat",
+        "col_last_run": "Last Run",
+        "time_placeholder": "HH:MM  or  YYYY-MM-DD HH:MM",
+        "daily_repeat": "Repeat daily",
+        "fired": "Scheduled Task",
+        "fired_msg": "Started: {name}"
+    },
+
+    "autocat": {
+        "dialog_title": "Auto-Categorization Rules",
+        "add": "➕ Add",
+        "delete": "🗑 Delete",
+        "reset": "↩ Reset to Defaults",
+        "col_name": "Name",
+        "col_field": "Field",
+        "col_pattern": "Regex/Pattern",
+        "col_dir": "Folder",
+        "col_type": "Type Override"
+    },
+
+    "subscription": {
+        "dialog_title": "Subscription Manager",
+        "add": "➕ Add",
+        "delete": "🗑 Delete",
+        "new_content": "New Subscription Content",
+        "auto_started": "Auto-download started: {title}"
+    },
+
+    "notification_center": {
+        "title": "Notification Center",
+        "empty": "No notifications yet.",
+        "clear": "Clear"
+    },
+
+    "mini_window": {
+        "title": "Mini Downloader",
+        "toggle_shortcut": "Ctrl+M"
+    },
+
+    "plugin": {
+        "loaded": "{count} plugin(s) loaded.",
+        "error": "Plugin Error",
+        "open_folder": "Open Folder",
+        "reload": "Reload"
+    },
+
+    "proxy_pool": {
+        "title": "Proxy Pool",
+        "desc": "One proxy per line — automatic rotation",
+        "placeholder": "http://user:pass@host:port\nsocks5://host:port"
+    },
+
+    "theme_designer": {
+        "corner_radius": "Corner Radius",
+        "accent_color": "Accent Color (hex)",
+        "accent_placeholder": "#0078D4",
+        "apply": "Apply"
     }
 }

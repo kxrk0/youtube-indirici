@@ -34,15 +34,11 @@ _locales_dir = None
 
 
 def _get_locales_dir() -> str:
-    """Dil dosyaları dizinini bul"""
+    """Dil dosyaları dizinini bul (EXE ve script modunu destekler)"""
     global _locales_dir
     if _locales_dir is None:
-        # Proje kök dizinini bul
-        current_file = os.path.abspath(__file__)
-        utils_dir = os.path.dirname(current_file)
-        src_dir = os.path.dirname(utils_dir)
-        root_dir = os.path.dirname(src_dir)
-        _locales_dir = os.path.join(root_dir, 'locales')
+        from src.utils.helpers import get_resource_dir
+        _locales_dir = os.path.join(get_resource_dir(), 'locales')
     return _locales_dir
 
 

@@ -1,0 +1,1 @@
+# Native Messaging Host package

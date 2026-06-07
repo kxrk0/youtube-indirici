@@ -3,8 +3,9 @@
 import os
 import platform
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QMessageBox
+from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QPoint
+from PyQt6.QtGui import QColor, QPainter, QPen, QPainterPath, QPixmap, QDrag, QCursor
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QLabel, QSizePolicy
 
 from qfluentwidgets import (
     ScrollArea, CardWidget, TitleLabel, BodyLabel, StrongBodyLabel,
@@ -15,9 +16,51 @@ from src.ui.gpu_widgets import setup_smooth_scroll
 from src.utils.helpers import get_os_download_dir
 
 
+class SpeedGraph(QWidget):
+    """Mini hız sparkline grafiği"""
+    MAX_POINTS = 40
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(100, 36)
+        self._speeds = []
+
+    def add_speed(self, bps: float):
+        self._speeds.append(max(0.0, float(bps or 0)))
+        if len(self._speeds) > self.MAX_POINTS:
+            self._speeds.pop(0)
+        self.update()
+
+    def reset(self):
+        self._speeds.clear()
+        self.update()
+
+    def paintEvent(self, event):
+        if len(self._speeds) < 2:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+        max_v = max(self._speeds) or 1.0
+        n = len(self._speeds)
+        path = QPainterPath()
+        for i, v in enumerate(self._speeds):
+            x = i * w / (n - 1)
+            y = h - 2 - (v / max_v) * (h - 4)
+            if i == 0:
+                path.moveTo(x, y)
+            else:
+                path.lineTo(x, y)
+        painter.setPen(QPen(QColor("#0078D4"), 1.5))
+        painter.drawPath(path)
+        painter.end()
+
+
 class DownloadItemCard(CardWidget):
-    """İndirme kartı - iptal desteği ile"""
+    """İndirme kartı - iptal + sıralama desteği ile"""
     cancel_requested = pyqtSignal()
+    move_up_requested   = pyqtSignal(object)  # emits self
+    move_down_requested = pyqtSignal(object)  # emits self
 
     def __init__(self, title, url, parent=None):
         super().__init__(parent)
@@ -25,14 +68,26 @@ class DownloadItemCard(CardWidget):
         self.download_task = None
         self.is_cancelled = False
         self.file_path = None
-        self.setFixedHeight(100)
+        self._is_active = False  # True once download starts — reorder disabled
+        self.setFixedHeight(120)
+        self.setAcceptDrops(False)
 
         h_layout = QHBoxLayout(self)
-        h_layout.setContentsMargins(24, 16, 24, 16)
-        h_layout.setSpacing(24)
+        h_layout.setContentsMargins(16, 12, 16, 12)
+        h_layout.setSpacing(16)
+
+        self.thumb_lbl = QLabel(self)
+        self.thumb_lbl.setFixedSize(84, 48)
+        self.thumb_lbl.setStyleSheet(
+            "background-color: #1e1e1e; border-radius: 4px;"
+        )
+        self.thumb_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.thumb_lbl.setScaledContents(False)
+        h_layout.addWidget(self.thumb_lbl)
 
         self.icon_widget = IconWidget(FluentIcon.VIDEO, self)
-        self.icon_widget.setFixedSize(40, 40)
+        self.icon_widget.setFixedSize(24, 24)
+        self.icon_widget.hide()
         h_layout.addWidget(self.icon_widget)
 
         info_layout = QVBoxLayout()
@@ -47,12 +102,29 @@ class DownloadItemCard(CardWidget):
         h_layout.addStretch(1)
 
         self.progress = ProgressBar(self)
-        self.progress.setFixedWidth(220)
+        self.progress.setFixedWidth(180)
         h_layout.addWidget(self.progress)
-        h_layout.addSpacing(16)
+        h_layout.addSpacing(8)
+
+        self.speed_graph = SpeedGraph(self)
+        h_layout.addWidget(self.speed_graph)
+        h_layout.addSpacing(8)
 
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
+
+        # Priority reorder buttons (hidden once active)
+        self.up_btn = TransparentToolButton(FluentIcon.UP, self)
+        self.up_btn.setToolTip("Yukarı Taşı")
+        self.up_btn.setFixedSize(28, 28)
+        self.up_btn.clicked.connect(lambda: self.move_up_requested.emit(self))
+        btn_layout.addWidget(self.up_btn)
+
+        self.down_btn = TransparentToolButton(FluentIcon.DOWN, self)
+        self.down_btn.setToolTip("Aşağı Taşı")
+        self.down_btn.setFixedSize(28, 28)
+        self.down_btn.clicked.connect(lambda: self.move_down_requested.emit(self))
+        btn_layout.addWidget(self.down_btn)
 
         self.open_folder_btn = TransparentToolButton(FluentIcon.FOLDER, self)
         self.open_folder_btn.clicked.connect(self.open_folder)
@@ -88,26 +160,40 @@ class DownloadItemCard(CardWidget):
 
     def set_cancelled(self):
         self.progress.hide()
+        self.speed_graph.hide()
         self.status_lbl.setText("İptal Edildi")
         self.status_lbl.setStyleSheet("color: #ff6b6b;")
         self.icon_widget.setIcon(FluentIcon.CANCEL)
+        self.icon_widget.show()
         self.cancel_btn.hide()
         self.delete_btn.show()
 
-    def update_progress(self, percent, speed, eta):
+    def mark_active(self):
+        """Disable reorder once download begins."""
+        self._is_active = True
+        self.up_btn.hide()
+        self.down_btn.hide()
+
+    def update_progress(self, percent, speed, eta, speed_bps: float = 0):
         if self.is_cancelled:
             return
+        if not self._is_active:
+            self.mark_active()
         self.progress.setValue(percent)
         self.status_lbl.setText(f"{speed} • {eta} kaldı")
+        if speed_bps > 0:
+            self.speed_graph.add_speed(speed_bps)
 
     def set_finished(self, filepath=None):
         if self.is_cancelled:
             return
         self.progress.setValue(100)
         self.progress.hide()
+        self.speed_graph.hide()
         self.status_lbl.setText("İndirme Tamamlandı")
         self.status_lbl.setStyleSheet("color: #00cc6a;")
         self.icon_widget.setIcon(FluentIcon.COMPLETED)
+        self.icon_widget.show()
         self.cancel_btn.hide()
         self.delete_btn.show()
         self.open_folder_btn.setEnabled(True)
@@ -128,9 +214,11 @@ class DownloadItemCard(CardWidget):
 
     def set_error(self, error_msg: str):
         self.progress.hide()
+        self.speed_graph.hide()
         self.status_lbl.setText(f"Hata: {error_msg[:50]}...")
         self.status_lbl.setStyleSheet("color: #ff6b6b;")
         self.icon_widget.setIcon(FluentIcon.INFO)
+        self.icon_widget.show()
         self.cancel_btn.hide()
         self.delete_btn.show()
 
@@ -181,6 +269,26 @@ class DownloadItemCard(CardWidget):
                 pass
 
 
+    def set_thumbnail_url(self, url: str):
+        if not url:
+            return
+        from src.ui.workers import ThumbnailUrlWorker
+        self._thumb_worker = ThumbnailUrlWorker(url)
+        self._thumb_worker.loaded.connect(self._on_thumb_data)
+        self._thumb_worker.start()
+
+    def _on_thumb_data(self, data: bytes):
+        pixmap = QPixmap()
+        pixmap.loadFromData(data)
+        if not pixmap.isNull():
+            scaled = pixmap.scaled(
+                84, 48,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.thumb_lbl.setPixmap(scaled)
+
+
 class QueueInterface(ScrollArea):
     """İndirme kuyruğu sayfası"""
 
@@ -210,5 +318,20 @@ class QueueInterface(ScrollArea):
 
     def add_download_item(self, title, url) -> DownloadItemCard:
         item = DownloadItemCard(title, url, self.view)
+        item.move_up_requested.connect(self._move_card_up)
+        item.move_down_requested.connect(self._move_card_down)
         self.list_layout.insertWidget(0, item)
         return item
+
+    def _move_card_up(self, card: DownloadItemCard):
+        idx = self.list_layout.indexOf(card)
+        if idx > 0:
+            self.list_layout.removeWidget(card)
+            self.list_layout.insertWidget(idx - 1, card)
+
+    def _move_card_down(self, card: DownloadItemCard):
+        idx = self.list_layout.indexOf(card)
+        count = self.list_layout.count()
+        if idx < count - 1:
+            self.list_layout.removeWidget(card)
+            self.list_layout.insertWidget(idx + 1, card)

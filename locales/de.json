@@ -128,5 +128,64 @@
     "advanced": {
         "custom_ffmpeg_title": "Benutzerdefinierte FFmpeg-Argumente",
         "custom_ffmpeg_placeholder": "Bsp.: -vf scale=1280:720"
+    },
+
+    "history": {
+        "title": "Download-Verlauf",
+        "integrity_check": "Integritätsprüfung",
+        "clear_history": "Verlauf löschen",
+        "platform_breakdown": "Plattformaufschlüsselung",
+        "total_downloads": "Gesamte Downloads",
+        "search_placeholder": "Titel oder URL suchen..."
+    },
+
+    "profiles": {
+        "title": "Download-Profil",
+        "select": "Profil auswählen",
+        "youtube_1080p": "YouTube 1080p",
+        "music_mp3": "Musik MP3",
+        "tiktok_shorts": "TikTok/Shorts",
+        "podcast": "Podcast",
+        "4k": "4K Ultra HD",
+        "480p": "480p Sparmodus"
+    },
+
+    "delta_sync": {
+        "label": "Delta Sync — nur neue Videos herunterladen",
+        "skipped": "Delta Sync: bereits heruntergeladen, übersprungen.",
+        "batch_skipped": "Delta Sync: {count} URLs bereits heruntergeladen, übersprungen."
+    },
+
+    "whisper": {
+        "dialog_title": "Transkript erstellen — Whisper AI",
+        "start": "▶ Starten",
+        "save_txt": "💾 TXT Speichern",
+        "model_label": "Modell",
+        "lang_label": "Sprache",
+        "not_installed": "openai-whisper nicht installiert.\nInstallieren: pip install openai-whisper",
+        "saved": "✅ Gespeichert: {path}",
+        "error": "❌ Fehler: {msg}"
+    },
+
+    "scheduler": {
+        "dialog_title": "Geplante Aufgaben",
+        "add": "➕ Hinzufügen",
+        "delete": "🗑 Ausgewählte löschen",
+        "daily_repeat": "Täglich wiederholen",
+        "fired": "Geplante Aufgabe",
+        "fired_msg": "Gestartet: {name}"
+    },
+
+    "notification_center": {
+        "title": "Benachrichtigungszentrum",
+        "empty": "Noch keine Benachrichtigungen.",
+        "clear": "Löschen"
+    },
+
+    "plugin": {
+        "loaded": "{count} Plugin(s) geladen.",
+        "error": "Plugin-Fehler",
+        "open_folder": "Ordner öffnen",
+        "reload": "Neu laden"
     }
 }

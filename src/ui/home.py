@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 
-from PyQt6.QtCore import Qt, QTimer, QTime
+from PyQt6.QtCore import Qt, QTimer, QTime, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QBrush
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog
 
@@ -13,7 +13,7 @@ from qfluentwidgets import (
 )
 
 from src.ui.gpu_widgets import setup_smooth_scroll
-from src.ui.workers import InfoFetchWorker
+from src.ui.workers import InfoFetchWorker, SpotifyInfoWorker
 from src.utils.helpers import (
     is_valid_url, get_os_download_dir, get_clipboard_text,
     get_optimal_timer_interval, get_animation_speed_factor,
@@ -98,6 +98,12 @@ class ScheduleDialog(MessageBoxBase):
 class HomeInterface(ScrollArea):
     """Ana sayfa - URL girişi ve hızlı indirme"""
 
+    _info_cache: dict = {}        # url → {'info': dict, 'formats': list, 'ts': float}
+    _CACHE_TTL:  int  = 300       # 5 dakika
+
+    # Cross-thread signals
+    _disk_signal = pyqtSignal(str)   # disk estimate message from background thread
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("homeInterface")
@@ -111,6 +117,8 @@ class HomeInterface(ScrollArea):
         self._current_info = None
         self._is_live = False
         self.worker = None
+        # Connect cross-thread signal → GUI slot (queued automatically for different threads)
+        self._disk_signal.connect(self._show_disk_estimate)
         self.init_ui()
 
     def init_ui(self):
@@ -118,7 +126,7 @@ class HomeInterface(ScrollArea):
         self.v_layout.setSpacing(20)
         self.v_layout.setContentsMargins(30, 30, 30, 30)
 
-        self.title_label = TitleLabel("YouTube İndirici", self.view)
+        self.title_label = TitleLabel("YDL İndirici", self.view)
         self.v_layout.addWidget(self.title_label)
 
         # URL giriş kartı
@@ -127,7 +135,7 @@ class HomeInterface(ScrollArea):
         input_row = QHBoxLayout()
 
         self.url_input = LineEdit(self.view)
-        self.url_input.setPlaceholderText("YouTube, Vimeo, Twitter/X, Dailymotion bağlantısı yapıştırın...")
+        self.url_input.setPlaceholderText("YouTube, SoundCloud, TikTok, Instagram, Twitter/X, Vimeo, Spotify, Twitch...")
         self.url_input.setClearButtonEnabled(True)
         self.url_input.textChanged.connect(self.on_url_changed)
 
@@ -158,6 +166,16 @@ class HomeInterface(ScrollArea):
         self.options_layout = QVBoxLayout(self.options_card)
         self.options_layout.setSpacing(15)
         self.options_layout.addWidget(SubtitleLabel("İndirme Ayarları", self.view))
+
+        # Profil seçici
+        profile_row = QHBoxLayout()
+        self.profile_combo = ComboBox(self.view)
+        self._load_profiles()
+        self.profile_combo.currentIndexChanged.connect(self._apply_profile)
+        profile_row.addWidget(StrongBodyLabel("Profil:", self.view))
+        profile_row.addWidget(self.profile_combo)
+        profile_row.addStretch()
+        self.options_layout.addLayout(profile_row)
 
         opts_row1 = QHBoxLayout()
         self.type_combo = ComboBox(self.view)
@@ -204,6 +222,20 @@ class HomeInterface(ScrollArea):
         self.normalize_check = CheckBox("Ses normalizasyonu (loudnorm -16 LUFS)", self.view)
         self.normalize_check.setToolTip("Ses seviyesini normalize eder - özellikle podcast/müzik için önerilir")
         self.options_layout.addWidget(self.normalize_check)
+
+        self.sponsorblock_check = CheckBox("SponsorBlock — reklam/tanıtım segmentlerini sil", self.view)
+        self.sponsorblock_check.setToolTip("Sponsor, intro, outro, selfpromo bölümlerini FFmpeg ile keser (yalnızca YouTube)")
+        self.options_layout.addWidget(self.sponsorblock_check)
+
+        self.delta_sync_check = CheckBox("Delta Sync — sadece yeni videoları indir (playlist/kanal)", self.view)
+        self.delta_sync_check.setToolTip("Daha önce indirilen URL'leri atla. Büyük kanallar için kullanışlı.")
+        self.options_layout.addWidget(self.delta_sync_check)
+
+        # Disk boyutu tahmini gösterge
+        self.disk_estimate_lbl = BodyLabel("", self.view)
+        self.disk_estimate_lbl.setStyleSheet("color:#f0ad4e; font-size:11px;")
+        self.disk_estimate_lbl.hide()
+        self.options_layout.addWidget(self.disk_estimate_lbl)
 
         trim_row = QHBoxLayout()
         self.trim_check = CheckBox("Video kes:", self.view)
@@ -253,7 +285,36 @@ class HomeInterface(ScrollArea):
         self.search_timer.setInterval(800)
         self.search_timer.timeout.connect(self.fetch_video_info)
 
+    # Platforms that truly cannot be downloaded (non-Spotify DRM)
+    _DRM_HOSTS = ('music.apple.com', 'tidal.com', 'deezer.com')
+
+    @staticmethod
+    def _is_drm_url(url: str) -> bool:
+        return any(h in url for h in HomeInterface._DRM_HOSTS)
+
+    @staticmethod
+    def _is_spotify_url(url: str) -> bool:
+        return 'open.spotify.com' in url
+
     def on_url_changed(self, text):
+        # Non-Spotify DRM platformları: hemen hata göster
+        if is_valid_url(text) and self._is_drm_url(text):
+            self.search_timer.stop()
+            self.skeleton_card.hide()
+            self.auto_quality_label.hide()
+            self.live_badge.hide()
+            self.video_info_card.reset_info()
+            self.video_info_card.title_lbl.setText("⛔ DRM Korumalı — İndirilemez")
+            self.video_info_card.channel_lbl.setText(
+                "Apple Music / Tidal / Deezer şifreli DRM kullanır — desteklenmiyor."
+            )
+            self.video_info_card.show()
+            self.download_btn.setEnabled(False)
+            self.schedule_btn.setEnabled(False)
+            self._current_info = None
+            self._is_live = False
+            return
+
         if is_valid_url(text):
             self.video_info_card.hide()
             self.skeleton_card.show()
@@ -274,20 +335,67 @@ class HomeInterface(ScrollArea):
             self._is_live = False
 
     def fetch_video_info(self):
+        import time as _time
         url = self.url_input.text()
         if not is_valid_url(url):
             return
+
+        # Spotify: özel oEmbed worker — yt-dlp çağırma
+        if self._is_spotify_url(url):
+            self.worker = SpotifyInfoWorker(url)
+            self.worker.info_ready.connect(self.on_info_ready)
+            self.worker.start()
+            return
+
+        # URL cache — aynı URL'yi tekrar fetch etme
+        cached = HomeInterface._info_cache.get(url)
+        if cached and (_time.time() - cached['ts']) < self._CACHE_TTL:
+            self.skeleton_card.hide()
+            self.on_info_ready(cached['info'], cached['formats'], False)
+            return
+
         main_window = self.window()
         if hasattr(main_window, 'downloader'):
             self.worker = InfoFetchWorker(main_window.downloader, url)
             self.worker.info_ready.connect(self.on_info_ready)
+            self.worker.info_ready.connect(lambda info, fmts, pl, u=url: self._cache_info(u, info, fmts))
             self.worker.start()
+
+    def _cache_info(self, url: str, info: dict, formats: list):
+        import time as _time
+        if info:
+            HomeInterface._info_cache[url] = {'info': info, 'formats': formats, 'ts': _time.time()}
 
     def on_info_ready(self, info, formats, is_playlist):
         self.skeleton_card.hide()
+        # Disk boyutu tahmini arka planda başlat
+        url = self.url_input.text()
+        if info and url and not info.get('is_spotify'):
+            self._estimate_disk_size(url)
         if not info:
-            self.video_info_card.title_lbl.setText("Video bilgisi alınamadı!")
+            url = self.url_input.text()
+            if self._is_drm_url(url):
+                self.video_info_card.title_lbl.setText("⛔ DRM Korumalı — İndirilemez")
+            else:
+                self.video_info_card.title_lbl.setText("Bilgi alınamadı! URL geçerli mi?")
+            self.video_info_card.show()
             self.download_btn.setEnabled(False)
+            self.auto_quality_label.hide()
+            return
+
+        # Spotify: yalnızca MP3 indirme, format combo'yu sınırla
+        if info.get('is_spotify'):
+            self._current_info = info          # ← thumbnail_url buradan aktarılır
+            self._is_live = False
+            self.video_info_card.update_info(info)
+            self.video_info_card.show()
+            self.quality_combo.clear()
+            self.quality_combo.addItem("🎵 MP3 (En İyi Kalite)", "spotify_audio")
+            self.quality_combo.setEnabled(False)
+            self.type_combo.setCurrentIndex(1)   # Ses (MP3)
+            self.type_combo.setEnabled(False)
+            self.download_btn.setEnabled(True)
+            self.schedule_btn.setEnabled(False)
             self.auto_quality_label.hide()
             return
 
@@ -405,6 +513,73 @@ class HomeInterface(ScrollArea):
             return "VP8"
         return vcodec[:8] if len(vcodec) > 8 else vcodec
 
+    # ─── Profil Sistemi ───────────────────────────────────────────────────────
+
+    def _load_profiles(self):
+        try:
+            from src.core.profiles import profile_names
+            names = profile_names()
+        except Exception:
+            names = []
+        self.profile_combo.clear()
+        self.profile_combo.addItem("— Profil Seç —")
+        for n in names:
+            self.profile_combo.addItem(n)
+
+    def _apply_profile(self, idx: int):
+        if idx <= 0:
+            return
+        name = self.profile_combo.currentText()
+        try:
+            from src.core.profiles import get_profile
+            p = get_profile(name)
+            if not p:
+                return
+            # type
+            if p.get('type_str') == 'audio':
+                self.type_combo.setCurrentIndex(1)
+            else:
+                self.type_combo.setCurrentIndex(0)
+            # sponsorblock
+            if hasattr(self, 'sponsorblock_check'):
+                self.sponsorblock_check.setChecked(bool(p.get('sponsorblock', False)))
+            # normalize
+            if hasattr(self, 'normalize_check'):
+                self.normalize_check.setChecked(bool(p.get('normalize_audio', False)))
+            InfoBar.success(title='Profil Uygulandı', content=name, duration=2000, parent=self)
+        except Exception as e:
+            print(f"[Profile] {e}")
+
+    # ─── Disk Boyutu Tahmini ──────────────────────────────────────────────────
+
+    def _estimate_disk_size(self, url: str):
+        """Arka planda yt-dlp --simulate ile boyut tahmini yap."""
+        import threading
+        def _do():
+            try:
+                import yt_dlp, shutil
+                ydl_opts = {'quiet': True, 'no_warnings': True, 'simulate': True, 'format': 'bestvideo+bestaudio/best'}
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                if not info:
+                    return
+                size = info.get('filesize') or info.get('filesize_approx') or 0
+                if size <= 0:
+                    return
+                from src.utils.helpers import format_size
+                disk_free = shutil.disk_usage(self.path_input.text()).free
+                msg = f"Tahmini boyut: ~{format_size(size)}"
+                if disk_free < size * 1.2:
+                    msg += f"  ⚠ Yetersiz disk (boş: {format_size(disk_free)})"
+                self._disk_signal.emit(msg)
+            except Exception:
+                pass
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _show_disk_estimate(self, msg: str):
+        self.disk_estimate_lbl.setText(msg)
+        self.disk_estimate_lbl.show()
+
     def paste_from_clipboard(self):
         text = get_clipboard_text()
         if text:
@@ -420,15 +595,30 @@ class HomeInterface(ScrollArea):
             def __init__(self, parent=None):
                 super().__init__(parent)
                 self.titleLabel.setText("Toplu İndirme")
-                self.viewLayout.addWidget(BodyLabel("Her satıra bir URL yazın veya yapıştırın:", self))
+                self.viewLayout.addWidget(BodyLabel("Her satıra bir URL yazın, yapıştırın veya .txt dosyası içe aktarın:", self))
                 self.url_text = TextEdit(self)
                 self.url_text.setPlaceholderText(
                     "https://youtube.com/watch?v=...\nhttps://youtube.com/watch?v=..."
                 )
-                self.url_text.setMinimumSize(400, 200)
+                self.url_text.setMinimumSize(420, 200)
                 self.viewLayout.addWidget(self.url_text)
+                import_btn = PushButton(FluentIcon.FOLDER, ".txt Dosyası İçe Aktar", self)
+                import_btn.clicked.connect(self._import_txt)
+                self.viewLayout.addWidget(import_btn)
                 self.yesButton.setText("İndir")
                 self.cancelButton.setText("İptal")
+
+            def _import_txt(self):
+                path, _ = QFileDialog.getOpenFileName(
+                    self, "URL Listesi Aç", "", "Metin Dosyaları (*.txt);;Tüm Dosyalar (*)"
+                )
+                if path:
+                    try:
+                        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                            content = f.read()
+                        self.url_text.setPlainText(content)
+                    except Exception as e:
+                        pass
 
             def get_urls(self):
                 urls = []
@@ -451,13 +641,28 @@ class HomeInterface(ScrollArea):
         type_str = 'video' if self.type_combo.currentIndex() == 0 else 'audio'
         save_meta = self.meta_check.isChecked()
         write_sub = self.subs_check.isChecked()
+        delta = hasattr(self, 'delta_sync_check') and self.delta_sync_check.isChecked()
         main_window = self.window()
         if hasattr(main_window, 'start_download_process'):
+            added = 0
+            skipped = 0
             for url in urls:
+                if delta:
+                    try:
+                        from src.core.database import get_download_history
+                        if get_download_history().is_url_downloaded(url):
+                            skipped += 1
+                            continue
+                    except Exception:
+                        pass
                 main_window.start_download_process(url, path, 'best', type_str, save_meta, write_sub)
+                added += 1
+            msg = f"{added} video sıraya eklendi."
+            if skipped:
+                msg += f" {skipped} Delta Sync ile atlandı."
             InfoBar.success(
                 title='Toplu İndirme Başlatıldı',
-                content=f"{len(urls)} video sıraya eklendi.",
+                content=msg,
                 duration=4000, parent=self
             )
 
@@ -474,6 +679,21 @@ class HomeInterface(ScrollArea):
 
     def start_download(self):
         url = self.url_input.text()
+
+        # Delta Sync — daha önce indirilmiş mi?
+        if hasattr(self, 'delta_sync_check') and self.delta_sync_check.isChecked():
+            try:
+                from src.core.database import get_download_history
+                if get_download_history().is_url_downloaded(url):
+                    InfoBar.info(
+                        title='Delta Sync',
+                        content='Bu URL zaten indirildi — atlandı.',
+                        duration=4000, parent=self
+                    )
+                    return
+            except Exception:
+                pass
+
         path = self.path_input.text()
         format_id = self.quality_combo.currentData() or 'best'
         save_meta = self.meta_check.isChecked()
@@ -483,14 +703,54 @@ class HomeInterface(ScrollArea):
         start_time = self.start_time_input.text().strip() if self.trim_check.isChecked() else None
         end_time = self.end_time_input.text().strip() if self.trim_check.isChecked() else None
 
+        # Duplicate URL detection — warn if URL already successfully downloaded
+        try:
+            from src.core.database import get_download_history
+            matches = get_download_history().search_downloads(url, limit=5)
+            already = any(r.get('url') == url and r.get('status') == 'completed' for r in matches)
+            if already:
+                InfoBar.warning(
+                    title='Tekrar İndirme',
+                    content='Bu URL daha önce indirildi. Yine de devam edilecek.',
+                    duration=4000, parent=self
+                )
+        except Exception:
+            pass
+
+        sponsorblock = self.sponsorblock_check.isChecked()
+
+        # Auto-categorize rules
+        try:
+            from src.core.auto_categorize import apply_rules
+            info_pre = self._current_info or {}
+            cat = apply_rules(
+                url=url,
+                title=info_pre.get('title', ''),
+                channel=info_pre.get('uploader') or info_pre.get('channel', ''),
+                base_output_dir=path,
+            )
+            if cat.get('output_dir'):
+                path = cat['output_dir']
+                os.makedirs(path, exist_ok=True)
+            if cat.get('type_override') and not self._is_live:
+                type_str = cat['type_override']
+        except Exception:
+            pass
+
         main_window = self.window()
         if hasattr(main_window, 'start_download_process'):
+            info = self._current_info or {}
             main_window.start_download_process(
                 url, path, format_id, type_str, save_meta, write_sub,
                 normalize_audio=normalize_audio,
                 start_time=start_time,
                 end_time=end_time,
                 is_live=self._is_live,
+                thumbnail_url=info.get('thumbnail', ''),
+                video_title=info.get('title', ''),
+                channel=info.get('uploader') or info.get('channel', ''),
+                duration=info.get('duration') or 0,
+                sponsorblock=sponsorblock,
             )
             label = "Kayıt başladı." if self._is_live else "İndirme başladı."
             InfoBar.success(title='Sıraya Alındı', content=label, duration=3000, parent=self)
@@ -544,3 +804,5 @@ class HomeInterface(ScrollArea):
         self.download_btn.setIcon(FluentIcon.DOWNLOAD)
         self.quality_combo.clear()
         self.quality_combo.addItem("En İyi (Otomatik)", "best")
+        self.quality_combo.setEnabled(True)
+        self.type_combo.setEnabled(True)

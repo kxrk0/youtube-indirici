@@ -1,24 +1,60 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Downloader Companion",
-  "version": "1.0",
-  "description": "Sends video information to the desktop application for downloading.",
+  "name": "Universal Downloader Companion",
+  "version": "2.1",
+  "description": "Download videos & audio from YouTube, YouTube Music, SoundCloud, TikTok, Instagram, Twitter, Vimeo, Twitch, Bandcamp, Reddit and more.",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
-    "notifications"
+    "notifications",
+    "contextMenus",
+    "downloads"
   ],
   "host_permissions": [
     "http://127.0.0.1:5000/*",
-    "*://www.youtube.com/*"
+    "*://player.vimeo.com/*",
+    "*://api.dailymotion.com/*",
+    "*://www.youtube.com/*",
+    "*://music.youtube.com/*",
+    "*://soundcloud.com/*",
+    "*://open.spotify.com/*",
+    "*://bandcamp.com/*",
+    "*://*.bandcamp.com/*",
+    "*://www.tiktok.com/*",
+    "*://www.instagram.com/*",
+    "*://twitter.com/*",
+    "*://x.com/*",
+    "*://vimeo.com/*",
+    "*://www.dailymotion.com/*",
+    "*://www.twitch.tv/*",
+    "*://clips.twitch.tv/*",
+    "*://www.reddit.com/*",
+    "*://old.reddit.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://www.youtube.com/*"],
+      "matches": [
+        "*://www.youtube.com/*",
+        "*://music.youtube.com/*",
+        "*://soundcloud.com/*",
+        "*://open.spotify.com/*",
+        "*://bandcamp.com/*",
+        "*://*.bandcamp.com/*",
+        "*://www.tiktok.com/*",
+        "*://www.instagram.com/*",
+        "*://twitter.com/*",
+        "*://x.com/*",
+        "*://vimeo.com/*",
+        "*://www.dailymotion.com/*",
+        "*://www.twitch.tv/*",
+        "*://clips.twitch.tv/*",
+        "*://www.reddit.com/*",
+        "*://old.reddit.com/*"
+      ],
       "js": ["content.js"],
       "css": ["style.css"],
       "run_at": "document_idle",
@@ -26,18 +62,23 @@
     }
   ],
   "action": {
-    "default_icon": "icons/download.svg",
-    "default_title": "YouTube Downloader Companion"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Universal Downloader Companion"
   },
   "icons": {
-    "16": "icons/download.svg",
-    "48": "icons/download.svg",
-    "128": "icons/download.svg"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/download.svg"],
-      "matches": ["*://www.youtube.com/*"]
+      "resources": ["icons/icon16.png", "icons/icon48.png", "icons/icon128.png"],
+      "matches": ["<all_urls>"]
     }
   ]
-} 
+}

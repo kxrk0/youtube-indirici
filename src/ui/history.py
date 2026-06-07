@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import csv
+import io
 import os
 import platform
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QMessageBox
+    QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog
 )
 
 from qfluentwidgets import (
@@ -39,39 +41,68 @@ class _HistoryLoader(QThread):
 class HistoryItemCard(CardWidget):
     delete_requested = pyqtSignal(int)
     open_requested = pyqtSignal(str)
+    retry_requested = pyqtSignal(str)   # emits url
 
     def __init__(self, row: dict, parent=None):
         super().__init__(parent)
         self.row_id = row.get('id', 0)
-        self.file_path = row.get('file_path', '')
-        self.setFixedHeight(80)
+        self.file_path = row.get('file_path', '') or ''
+        self._thumb_worker = None
+        self.setFixedHeight(88)
 
         h = QHBoxLayout(self)
-        h.setContentsMargins(20, 12, 20, 12)
-        h.setSpacing(16)
+        h.setContentsMargins(16, 10, 16, 10)
+        h.setSpacing(14)
 
-        # Tür ikonu
-        is_audio = (row.get('format_type', '') == 'audio')
-        icon = FluentIcon.MUSIC if is_audio else FluentIcon.VIDEO
+        # Thumbnail (80×45) veya fallback ikon
+        from PyQt6.QtWidgets import QLabel
+        from PyQt6.QtGui import QPixmap
         from qfluentwidgets import IconWidget
-        icon_w = IconWidget(icon, self)
-        icon_w.setFixedSize(32, 32)
-        h.addWidget(icon_w)
+
+        is_audio = (row.get('format_type', '') == 'audio')
+        thumb_url = row.get('thumbnail_url') or ''
+
+        self.thumb_lbl = QLabel(self)
+        self.thumb_lbl.setFixedSize(80, 45)
+        self.thumb_lbl.setStyleSheet(
+            "background:#2a2a2a; border-radius:4px;"
+        )
+        self.thumb_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        if thumb_url:
+            from src.ui.workers import ThumbnailUrlWorker
+            self._thumb_worker = ThumbnailUrlWorker(thumb_url)
+            self._thumb_worker.loaded.connect(self._on_thumb_loaded)
+            self._thumb_worker.start()
+        else:
+            # Ikon fallback
+            icon = FluentIcon.MUSIC if is_audio else FluentIcon.VIDEO
+            icon_w = IconWidget(icon, self.thumb_lbl)
+            icon_w.setFixedSize(24, 24)
+            icon_w.move(28, 10)
+
+        h.addWidget(self.thumb_lbl)
 
         # Bilgi
         info_v = QVBoxLayout()
         info_v.setSpacing(2)
 
-        title = row.get('title') or os.path.basename(row.get('file_path', '')) or row.get('url', '')
+        title = (row.get('title') or
+                 (os.path.splitext(os.path.basename(self.file_path))[0] if self.file_path else '') or
+                 row.get('url', ''))
         self.title_lbl = StrongBodyLabel(title[:80], self)
-        channel = row.get('channel', '')
+        channel = row.get('channel') or ''  # None → ''
         date = str(row.get('download_date', ''))[:16]
         size = format_size(row.get('file_size') or 0)
         dur = format_duration(row.get('duration') or 0)
-        meta = f"{channel}  •  {date}  •  {size}"
-        if dur and dur != "Bilinmiyor" and dur != "00:00":
-            meta += f"  •  {dur}"
-        self.meta_lbl = BodyLabel(meta, self)
+        meta_parts = []
+        if channel:
+            meta_parts.append(channel)
+        meta_parts.append(date)
+        meta_parts.append(size)
+        if dur and dur not in ('Bilinmiyor', '00:00'):
+            meta_parts.append(dur)
+        self.meta_lbl = BodyLabel('  •  '.join(meta_parts), self)
         self.meta_lbl.setStyleSheet("color: gray; font-size: 11px;")
 
         info_v.addWidget(self.title_lbl)
@@ -98,10 +129,27 @@ class HistoryItemCard(CardWidget):
             folder_btn.clicked.connect(self._open_folder)
             h.addWidget(folder_btn)
 
+        # Retry button for error rows
+        if status == 'error' and row.get('url'):
+            retry_btn = TransparentToolButton(FluentIcon.SYNC, self)
+            retry_btn.setToolTip("Tekrar İndir")
+            retry_btn.clicked.connect(lambda: self.retry_requested.emit(row.get('url', '')))
+            h.addWidget(retry_btn)
+
         del_btn = TransparentToolButton(FluentIcon.DELETE, self)
         del_btn.setToolTip("Geçmişten Sil")
         del_btn.clicked.connect(lambda: self.delete_requested.emit(self.row_id))
         h.addWidget(del_btn)
+
+    def _on_thumb_loaded(self, data: bytes):
+        from PyQt6.QtGui import QPixmap
+        from PyQt6.QtCore import Qt as _Qt
+        px = QPixmap()
+        px.loadFromData(data)
+        if not px.isNull():
+            scaled = px.scaled(80, 45, _Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                               _Qt.TransformationMode.SmoothTransformation)
+            self.thumb_lbl.setPixmap(scaled)
 
     def _open_folder(self):
         if self.file_path:
@@ -112,6 +160,7 @@ class HistoryItemCard(CardWidget):
 
 class HistoryInterface(ScrollArea):
     """İndirme geçmişi sayfası"""
+    retry_requested = pyqtSignal(str)   # propagates card signal up to MainWindow
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -137,6 +186,15 @@ class HistoryInterface(ScrollArea):
         self.refresh_btn = PushButton(FluentIcon.SYNC, "Yenile", self.view)
         self.refresh_btn.clicked.connect(self.load_history)
         header.addWidget(self.refresh_btn)
+
+        self.export_btn = PushButton(FluentIcon.SAVE, "CSV Dışa Aktar", self.view)
+        self.export_btn.clicked.connect(self.export_csv)
+        header.addWidget(self.export_btn)
+
+        self.integrity_btn = PushButton(FluentIcon.SEARCH, "Bütünlük Kontrolü", self.view)
+        self.integrity_btn.setToolTip("İndirilen dosyaların diskten hâlâ erişilebilir olup olmadığını kontrol eder")
+        self.integrity_btn.clicked.connect(self._check_file_integrity)
+        header.addWidget(self.integrity_btn)
 
         self.clear_btn = PushButton(FluentIcon.DELETE, "Tümünü Temizle", self.view)
         self.clear_btn.clicked.connect(self.clear_all)
@@ -165,6 +223,21 @@ class HistoryInterface(ScrollArea):
             self.stats_layout.addStretch()
         self.v_layout.addWidget(self.stats_card)
 
+        # Platform dağılımı kartı
+        self.platform_card = CardWidget(self.view)
+        self.platform_card_layout = QVBoxLayout(self.platform_card)
+        self.platform_card_layout.setContentsMargins(20, 14, 20, 14)
+        self.platform_card_layout.setSpacing(6)
+        plat_header = BodyLabel("Platform Dağılımı", self.platform_card)
+        plat_header.setStyleSheet("color: gray; font-size: 11px;")
+        self.platform_card_layout.addWidget(plat_header)
+        self._platform_bars_widget = QWidget(self.platform_card)
+        self._platform_bars_layout = QVBoxLayout(self._platform_bars_widget)
+        self._platform_bars_layout.setSpacing(4)
+        self._platform_bars_layout.setContentsMargins(0, 0, 0, 0)
+        self.platform_card_layout.addWidget(self._platform_bars_widget)
+        self.v_layout.addWidget(self.platform_card)
+
         # Liste alanı
         self.list_widget = QWidget(self.view)
         self.list_layout = QVBoxLayout(self.list_widget)
@@ -183,6 +256,7 @@ class HistoryInterface(ScrollArea):
         self._search_timer.timeout.connect(self._do_search)
 
         self.is_loaded = False
+        self._current_rows = []
 
     def _stat_widget(self, label: str, value: str) -> QWidget:
         w = QWidget()
@@ -226,6 +300,39 @@ class HistoryInterface(ScrollArea):
         self._update_stat("Bu Ay", str(stats.get('this_month', 0)))
         self._update_stat("Toplam Boyut", format_size(stats.get('total_size_bytes', 0)))
 
+        # Platform dağılımı güncelle
+        try:
+            breakdown = get_download_history().get_platform_breakdown()
+            while self._platform_bars_layout.count():
+                item = self._platform_bars_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            max_count = max((p['count'] for p in breakdown), default=1)
+            for p in breakdown[:8]:
+                row_w = QWidget()
+                row_h = QHBoxLayout(row_w)
+                row_h.setContentsMargins(0, 0, 0, 0)
+                row_h.setSpacing(8)
+                name_lbl = BodyLabel(p['platform'])
+                name_lbl.setFixedWidth(110)
+                bar_bg = QWidget()
+                bar_bg.setFixedHeight(12)
+                bar_bg.setStyleSheet("background:#333; border-radius:4px;")
+                fill_pct = int(p['count'] / max_count * 100)
+                bar_fill = QWidget(bar_bg)
+                bar_fill.setFixedHeight(12)
+                bar_fill.setStyleSheet("background:#0078d4; border-radius:4px;")
+                bar_fill.setFixedWidth(max(4, int(fill_pct * 2)))
+                count_lbl = BodyLabel(str(p['count']))
+                count_lbl.setStyleSheet("color:#888; font-size:11px;")
+                count_lbl.setFixedWidth(36)
+                row_h.addWidget(name_lbl)
+                row_h.addWidget(bar_bg, 1)
+                row_h.addWidget(count_lbl)
+                self._platform_bars_layout.addWidget(row_w)
+        except Exception:
+            pass
+
         # Listeyi temizle
         while self.list_layout.count():
             item = self.list_layout.takeAt(0)
@@ -238,10 +345,12 @@ class HistoryInterface(ScrollArea):
             self.list_layout.addWidget(empty)
             return
 
+        self._current_rows = rows
         for row in rows:
             card = HistoryItemCard(row, self.list_widget)
             card.delete_requested.connect(self._delete_row)
             card.open_requested.connect(self._open_file)
+            card.retry_requested.connect(self.retry_requested)
             self.list_layout.addWidget(card)
 
     def _delete_row(self, row_id: int):
@@ -257,6 +366,54 @@ class HistoryInterface(ScrollArea):
     def _open_file(self, path: str):
         if platform.system() == 'Windows' and os.path.exists(path):
             os.startfile(path)
+
+    def export_csv(self):
+        """Mevcut geçmişi CSV dosyasına aktar"""
+        if not self._current_rows:
+            InfoBar.warning(title="CSV", content="Dışa aktarılacak kayıt yok.", duration=3000, parent=self)
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "CSV Kaydet", os.path.join(os.path.expanduser('~'), 'indirme_gecmisi.csv'),
+            "CSV Dosyası (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            fields = ['id', 'title', 'channel', 'url', 'format_type',
+                      'file_path', 'file_size', 'duration', 'status', 'download_date']
+            with open(path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore')
+                writer.writeheader()
+                writer.writerows(self._current_rows)
+            InfoBar.success(title="CSV", content=f"Dışa aktarıldı: {os.path.basename(path)}", duration=4000, parent=self)
+        except Exception as e:
+            InfoBar.error(title="CSV Hatası", content=str(e)[:120], duration=5000, parent=self)
+
+    def _check_file_integrity(self):
+        """Tamamlanan kayıtlardaki dosya yollarını diskten kontrol et."""
+        if not self._current_rows:
+            InfoBar.warning(title="Bütünlük", content="Kontrol edilecek kayıt yok.", duration=3000, parent=self)
+            return
+        missing = []
+        for row in self._current_rows:
+            fp = row.get('file_path', '')
+            status = row.get('status', '')
+            if status == 'completed' and fp and not os.path.exists(fp):
+                missing.append(os.path.basename(fp) or fp)
+        if missing:
+            names = '\n'.join(missing[:10])
+            extra = f'\n... ve {len(missing) - 10} dosya daha' if len(missing) > 10 else ''
+            InfoBar.warning(
+                title=f'Eksik Dosya ({len(missing)})',
+                content=f'Şu dosyalar diskten silinmiş veya taşınmış:\n{names}{extra}',
+                duration=8000, parent=self
+            )
+        else:
+            InfoBar.success(
+                title='Bütünlük Kontrolü',
+                content='Tüm tamamlanan dosyalar diskten erişilebilir.',
+                duration=4000, parent=self
+            )
 
     def clear_all(self):
         reply = QMessageBox.question(

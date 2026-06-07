@@ -141,5 +141,115 @@
   "advanced": {
     "custom_ffmpeg_title": "Özel FFmpeg Argümanları",
     "custom_ffmpeg_placeholder": "Örn: -vf scale=1280:720"
+  },
+
+  "history": {
+    "title": "İndirme Geçmişi",
+    "integrity_check": "Bütünlük Kontrolü",
+    "clear_history": "Geçmişi Temizle",
+    "platform_breakdown": "Platform Dağılımı",
+    "total_downloads": "Toplam İndirme",
+    "search_placeholder": "Başlık veya URL ara..."
+  },
+
+  "profiles": {
+    "title": "İndirme Profili",
+    "select": "Profil Seç",
+    "youtube_1080p": "YouTube 1080p",
+    "music_mp3": "Müzik MP3",
+    "tiktok_shorts": "TikTok/Shorts",
+    "podcast": "Podcast",
+    "4k": "4K Ultra HD",
+    "480p": "480p Tasarruf"
+  },
+
+  "delta_sync": {
+    "label": "Delta Sync — sadece yeni videoları indir",
+    "skipped": "Delta Sync: zaten indirilmiş, atlandı.",
+    "batch_skipped": "Delta Sync: {count} URL zaten indirilmiş, atlandı."
+  },
+
+  "disk_estimate": {
+    "estimating": "Boyut tahmin ediliyor…",
+    "result": "Tahmini: {size}",
+    "low_space": "⚠ Disk alanı az! Tahmini: {size}, Boş: {free}",
+    "unavailable": "Boyut tahmin edilemiyor"
+  },
+
+  "whisper": {
+    "dialog_title": "Transkript Oluştur — Whisper AI",
+    "start": "▶ Başlat",
+    "save_txt": "💾 TXT Kaydet",
+    "model_label": "Model",
+    "lang_label": "Dil",
+    "not_installed": "openai-whisper kurulu değil.\nKur: pip install openai-whisper",
+    "saved": "✅ Kaydedildi: {path}",
+    "error": "❌ Hata: {msg}"
+  },
+
+  "scheduler": {
+    "dialog_title": "Zamanlanmış Görevler",
+    "add": "➕ Ekle",
+    "delete": "🗑 Seçiliyi Sil",
+    "col_name": "Ad",
+    "col_url": "URL",
+    "col_time": "Saat",
+    "col_repeat": "Tekrar",
+    "col_last_run": "Son Çalışma",
+    "time_placeholder": "HH:MM  veya  YYYY-MM-DD HH:MM",
+    "daily_repeat": "Her gün tekrarla",
+    "fired": "Zamanlanmış Görev",
+    "fired_msg": "Başlatıldı: {name}"
+  },
+
+  "autocat": {
+    "dialog_title": "Otomatik Kategorizasyon Kuralları",
+    "add": "➕ Ekle",
+    "delete": "🗑 Sil",
+    "reset": "↩ Varsayılana Sıfırla",
+    "col_name": "Ad",
+    "col_field": "Alan",
+    "col_pattern": "Regex/Desen",
+    "col_dir": "Klasör",
+    "col_type": "Tür Override"
+  },
+
+  "subscription": {
+    "dialog_title": "Abonelik Yöneticisi",
+    "add": "➕ Ekle",
+    "delete": "🗑 Sil",
+    "new_content": "Yeni Abonelik İçeriği",
+    "auto_started": "Otomatik indirme başlatıldı: {title}"
+  },
+
+  "notification_center": {
+    "title": "Bildirim Merkezi",
+    "empty": "Henüz bildirim yok.",
+    "clear": "Temizle"
+  },
+
+  "mini_window": {
+    "title": "Mini İndirici",
+    "toggle_shortcut": "Ctrl+M"
+  },
+
+  "plugin": {
+    "loaded": "{count} plugin yüklendi.",
+    "error": "Plugin Hata",
+    "open_folder": "Klasörü Aç",
+    "reload": "Yenile"
+  },
+
+  "proxy_pool": {
+    "title": "Proxy Pool",
+    "desc": "Her satıra bir proxy — otomatik rotasyon",
+    "placeholder": "http://user:pass@host:port\nsocks5://host:port"
+  },
+
+  "theme_designer": {
+    "corner_radius": "Köşe Yuvarlaklığı",
+    "accent_color": "Vurgu Rengi (hex)",
+    "accent_placeholder": "#0078D4",
+    "apply": "Uygula"
   }
 }

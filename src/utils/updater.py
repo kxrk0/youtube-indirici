@@ -186,3 +186,132 @@ def get_auto_updater() -> AutoUpdater:
     if _updater_instance is None:
         _updater_instance = AutoUpdater()
     return _updater_instance
+
+
+# ─── Gerçek Güncelleme İndirme + Yükleme ─────────────────────────────────────
+
+def download_and_install_update(
+    update_info: UpdateInfo,
+    progress_callback: Optional[Callable[[int], None]] = None,
+) -> bool:
+    """
+    Yeni sürümü indir, update bat yaz ve uygulamayı yeniden başlat.
+
+    progress_callback(int 0-100) — indirme ilerlemesi için çağrılır.
+    True döner → uygulama kapanacak ve update çalışacak.
+    False döner → hata oluştu.
+    """
+    import sys
+    import tempfile
+    import zipfile
+    import shutil
+    import subprocess
+
+    download_url = update_info.download_url
+    if not download_url:
+        return False
+
+    # Yalnızca ZIP veya EXE desteklenir
+    fname = download_url.rstrip('/').split('/')[-1]
+    is_zip = fname.lower().endswith('.zip')
+    is_exe = fname.lower().endswith('.exe')
+    if not (is_zip or is_exe):
+        # HTML sayfası linki — tarayıcıya aç
+        import webbrowser
+        webbrowser.open(download_url)
+        return False
+
+    tmp_dir = tempfile.mkdtemp(prefix='ydl_update_')
+    local_path = os.path.join(tmp_dir, fname)
+
+    try:
+        req = Request(
+            download_url,
+            headers={'User-Agent': f'YouTubeStudioDownloader/{APP_VERSION}'}
+        )
+        with urlopen(req, timeout=120) as resp:
+            total = int(resp.headers.get('Content-Length', 0) or 0)
+            downloaded = 0
+            with open(local_path, 'wb') as f:
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if progress_callback and total:
+                        progress_callback(int(downloaded * 100 / total))
+
+        if progress_callback:
+            progress_callback(100)
+
+        # Mevcut uygulama yolu
+        if getattr(sys, 'frozen', False):
+            # PyInstaller EXE
+            app_exe = sys.executable
+            app_dir = os.path.dirname(app_exe)
+        else:
+            app_exe = sys.executable
+            app_dir = os.getcwd()
+
+        # ZIP ise çıkar
+        src_dir = None
+        if is_zip:
+            extract_dir = os.path.join(tmp_dir, 'extracted')
+            with zipfile.ZipFile(local_path, 'r') as z:
+                z.extractall(extract_dir)
+            # Alt klasör varsa (örn. YouTubeIndirici/)
+            entries = [e for e in os.listdir(extract_dir)]
+            if len(entries) == 1 and os.path.isdir(os.path.join(extract_dir, entries[0])):
+                src_dir = os.path.join(extract_dir, entries[0])
+            else:
+                src_dir = extract_dir
+
+        # update.bat yaz — quotes stripped from paths, spaces preserved
+        bat_path = os.path.join(tmp_dir, 'do_update.bat')
+
+        def _esc(p: str) -> str:
+            """Strip inner quotes only — leave spaces as-is for cmd quoting."""
+            return p.replace('"', '').replace("'", '')
+
+        app_dir_esc  = _esc(app_dir)
+        local_esc    = _esc(local_path)
+        src_dir_esc  = _esc(src_dir or '')
+        app_exe_esc  = _esc(app_exe)
+        tmp_dir_esc  = _esc(tmp_dir)
+
+        lines = [
+            '@echo off',
+            'chcp 65001 > nul',            # UTF-8 codepage for Turkish paths
+            'timeout /t 2 /nobreak > nul',
+        ]
+        if is_zip and src_dir:
+            lines.append(f'xcopy /e /y /i /q "{src_dir_esc}" "{app_dir_esc}\\"')
+        else:
+            lines.append(f'copy /y "{local_esc}" "{app_exe_esc}"')
+        lines += [
+            f'start "" "{app_exe_esc}"',
+            f'(goto) 2>nul & rd /s /q "{tmp_dir_esc}"',
+        ]
+
+        bat_content = '\r\n'.join(lines) + '\r\n'
+        with open(bat_path, 'w', encoding='utf-8-sig') as bat:
+            bat.write(bat_content)
+
+        # bat'ı başlat ve uygulama çıksın
+        subprocess.Popen(
+            ['cmd', '/c', bat_path],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            close_fds=True,
+        )
+        return True
+
+    except HTTPError as e:
+        print(f"[Updater] HTTP hata {e.code}: {e}")
+    except URLError as e:
+        print(f"[Updater] Ağ hatası: {e}")
+    except Exception as e:
+        print(f"[Updater] Hata: {e}")
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    return False

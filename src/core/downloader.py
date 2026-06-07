@@ -18,6 +18,15 @@ import yt_dlp
 from src.utils.helpers import get_os_download_dir, get_ffmpeg_path, embed_metadata
 from src.core.database import get_download_history
 
+
+class _SilentLogger:
+    """yt-dlp JS runtime uyarılarını bastırır"""
+    def debug(self, msg): pass
+    def info(self, msg): pass
+    def warning(self, msg): pass
+    def error(self, msg): print(f"[yt-dlp] {msg}")
+
+
 # İndirme durumları
 DOWNLOAD_STATUS_IDLE = "idle"
 DOWNLOAD_STATUS_DOWNLOADING = "downloading"
@@ -72,7 +81,7 @@ class Downloader:
         """Video hakkında bilgi alır"""
         try:
             print(f"Video bilgisi alınıyor: {url}")
-            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'logger': _SilentLogger()}) as ydl:
                 info = ydl.extract_info(url, download=False)
                 if info:
                     print(f"Video başlığı: {info.get('title')}")
@@ -95,6 +104,7 @@ class Downloader:
                 'extract_flat': True,
                 'quiet': True,
                 'no_warnings': True,
+                'logger': _SilentLogger(),
             }
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(url, download=False)
@@ -126,9 +136,9 @@ class Downloader:
             
         return formats
     
-    def download_video(self, 
-                      url: str, 
-                      output_path: str, 
+    def download_video(self,
+                      url: str,
+                      output_path: str,
                       format_id: str = 'best',
                       progress_callback: Optional[Callable] = None,
                       complete_callback: Optional[Callable] = None,
@@ -140,7 +150,9 @@ class Downloader:
                       start_time: str = None,
                       end_time: str = None,
                       proxy: Optional[str] = None,
-                      custom_ffmpeg_args: Optional[str] = None) -> DownloadTask:
+                      custom_ffmpeg_args: Optional[str] = None,
+                      filename_template: str = None,
+                      sponsorblock: bool = False) -> DownloadTask:
         """
         Video indirir
         
@@ -216,9 +228,14 @@ class Downloader:
             if format_id == 'best':
                 format_spec = 'bestvideo+bestaudio/best'
             
+            tpl = filename_template or '%(title)s.%(ext)s'
+            # Convert user-friendly {title} → %(title)s placeholders
+            for key in ('title','uploader','channel','upload_date','resolution','ext','id'):
+                tpl = tpl.replace(f'{{{key}}}', f'%({key})s')
+
             ydl_opts = {
                 'format': format_spec,
-                'outtmpl': os.path.join(output_path, '%(title)s.%(ext)s'),
+                'outtmpl': os.path.join(output_path, tpl),
                 'writethumbnail': True,
                 'concurrent_fragment_downloads': 8,
                 'http_chunk_size': 10485760,
@@ -240,7 +257,8 @@ class Downloader:
                 'keepvideo': False,
                 'verbose': False,
                 'quiet': True,
-                'no_warnings': False,
+                'no_warnings': True,
+                'logger': _SilentLogger(),
                 'ignoreerrors': False,
                 'socket_timeout': 30,  # Ağ timeout
                 'retries': 3,  # yt-dlp internal retry
@@ -252,6 +270,11 @@ class Downloader:
                 ydl_opts['writesubtitles'] = True
                 ydl_opts['subtitleslangs'] = sub_langs.split(',')
                 ydl_opts['embedsubtitles'] = True
+
+            if sponsorblock:
+                ydl_opts['sponsorblock_remove'] = [
+                    'sponsor', 'intro', 'outro', 'selfpromo', 'interaction', 'preview'
+                ]
             
             if ratelimit:
                 ydl_opts['ratelimit'] = ratelimit
@@ -403,9 +426,9 @@ class Downloader:
         return 0
 
     def download_audio(self,
-                      url: str, 
-                      output_path: str, 
-                      audio_quality: str = '0',  # En yüksek kalite
+                      url: str,
+                      output_path: str,
+                      audio_quality: str = '0',
                       progress_callback: Optional[Callable] = None,
                       complete_callback: Optional[Callable] = None,
                       save_info: bool = False,
@@ -413,7 +436,8 @@ class Downloader:
                       normalize_audio: bool = False,
                       target_loudness: float = -16.0,
                       proxy: Optional[str] = None,
-                      custom_ffmpeg_args: Optional[str] = None) -> None:
+                      custom_ffmpeg_args: Optional[str] = None,
+                      filename_template: str = None) -> None:
         """
         Sadece ses indirir (MP3 formatında)
         
@@ -442,9 +466,13 @@ class Downloader:
                     'extra_args': ['-af', f'loudnorm=I={target_loudness}:TP=-1.5:LRA=11']
                 })
             
+            atpl = filename_template or '%(title)s.%(ext)s'
+            for key in ('title','uploader','channel','upload_date','ext','id'):
+                atpl = atpl.replace(f'{{{key}}}', f'%({key})s')
+
             ydl_opts = {
                 'format': 'bestaudio/best',
-                'outtmpl': os.path.join(output_path, '%(title)s.%(ext)s'),
+                'outtmpl': os.path.join(output_path, atpl),
                 'writethumbnail': True,
                 'concurrent_fragment_downloads': 8,
                 'http_chunk_size': 10485760,
@@ -633,68 +661,43 @@ class Downloader:
         """Aktif indirme görevlerini döndürür"""
         return list(self.active_tasks.values())
             
-    def process_extension_request(self, video_url: str, format_quality: str, format_type: str, 
-                                 output_path: str = None, save_metadata: bool = False) -> Dict:
-        """
-        Tarayıcı eklentisinden gelen indirme isteklerini işler
-        
-        Args:
-            video_url: İndirilecek video URL'si
-            format_quality: İstenilen video kalitesi (1080p, 720p, vb.) veya 'Audio Only'
-            format_type: İndirme tipi ('video' veya 'audio')
-            output_path: Çıktı dosyasının kaydedileceği yol
-            save_metadata: Meta verileri kaydet (JSON)
-            
-        Returns:
-            Dict: İşlem sonucu bilgisi
-        """
+    def process_extension_request(self, video_url: str, format_quality: str, format_type: str,
+                                 output_path: str = None, save_metadata: bool = False,
+                                 write_sub: bool = False,
+                                 start_time=None, end_time=None) -> Dict:
+        """Tarayıcı eklentisinden gelen indirme isteklerini işler"""
         if not output_path:
             output_path = get_os_download_dir()
-            
+
+        RESOLUTION_MAP = {
+            '2160p': 'bestvideo[height<=2160]+bestaudio/best[height<=2160]',
+            '1440p': 'bestvideo[height<=1440]+bestaudio/best[height<=1440]',
+            '1080p': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+            '720p':  'bestvideo[height<=720]+bestaudio/best[height<=720]',
+            '480p':  'bestvideo[height<=480]+bestaudio/best[height<=480]',
+            '360p':  'bestvideo[height<=360]+bestaudio/best[height<=360]',
+            '240p':  'bestvideo[height<=240]+bestaudio/best[height<=240]',
+            '144p':  'bestvideo[height<=144]+bestaudio/best[height<=144]',
+        }
+
         try:
-            # Ses formatı ise
-            if format_type == 'audio' or format_quality == 'Audio Only':
+            if format_type == 'audio' or format_quality in ('audio', 'Audio Only'):
                 print(f"Eklentiden ses indirme isteği: {video_url}")
-                self.download_audio(
-                    url=video_url,
-                    output_path=output_path,
-                    save_info=save_metadata
-                )
-                return {
-                    "status": "success", 
-                    "message": f"MP3 indirme başlatıldı", 
-                    "type": "audio"
-                }
-            
-            # Video formatı ise
-            else:
-                # Format ID'yi belirleyelim
-                format_id = 'best'  # Varsayılan en iyi kalite
-                
-                # Eğer belirli bir çözünürlük seçildiyse
-                if format_quality in ['1080p', '720p', '480p', '360p']:
-                    # Basit bir dönüşüm, gerçek format_id'ler için video bilgisi alınmalı
-                    resolution_map = {
-                        '1080p': 'best[height<=1080]',
-                        '720p': 'best[height<=720]',
-                        '480p': 'best[height<=480]',
-                        '360p': 'best[height<=360]'
-                    }
-                    format_id = resolution_map.get(format_quality, 'best')
-                
-                print(f"Eklentiden video indirme isteği: {video_url} ({format_quality})")
-                self.download_video(
-                    url=video_url,
-                    output_path=output_path,
-                    format_id=format_id,
-                    save_info=save_metadata
-                )
-                return {
-                    "status": "success", 
-                    "message": f"{format_quality} video indirme başlatıldı", 
-                    "type": "video"
-                }
-        
+                self.download_audio(url=video_url, output_path=output_path, save_info=save_metadata)
+                return {"status": "success", "message": "MP3 indirme başlatıldı", "type": "audio"}
+
+            format_id = RESOLUTION_MAP.get(format_quality, 'bestvideo+bestaudio/best')
+            print(f"Eklentiden video indirme isteği: {video_url} ({format_quality})")
+            self.download_video(url=video_url, output_path=output_path,
+                                format_id=format_id, save_info=save_metadata,
+                                write_sub=write_sub,
+                                start_time=str(start_time) if start_time is not None else None,
+                                end_time=str(end_time) if end_time is not None else None)
+            msg = f"{format_quality} video indirme başlatıldı"
+            if start_time is not None:
+                msg += f" (kırpma: {start_time}s–{end_time}s)"
+            return {"status": "success", "message": msg, "type": "video"}
+
         except Exception as e:
             print(f"Eklenti indirme hatası: {str(e)}")
-            return {"status": "error", "message": str(e)} 
+            return {"status": "error", "message": str(e)}

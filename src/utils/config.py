@@ -5,11 +5,12 @@ import json
 import secrets
 from typing import Any, Dict
 
-_CONFIG_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    'cache'
-)
-_CONFIG_PATH = os.path.join(_CONFIG_DIR, 'config.json')
+def _get_config_dir() -> str:
+    from src.utils.helpers import get_app_dir
+    return os.path.join(get_app_dir(), 'cache')
+
+_CONFIG_DIR = None  # lazily resolved
+_CONFIG_PATH = None  # lazily resolved
 
 _DEFAULTS: Dict[str, Any] = {
     'theme': 'dark',
@@ -20,6 +21,8 @@ _DEFAULTS: Dict[str, Any] = {
     'proxy': '',
     'custom_ffmpeg_args': '',
     'api_key': '',
+    'window_width': 1100,
+    'window_height': 720,
 }
 
 _cache: Dict[str, Any] = {}
@@ -27,10 +30,13 @@ _loaded = False
 
 
 def _ensure_loaded():
-    global _cache, _loaded
+    global _cache, _loaded, _CONFIG_DIR, _CONFIG_PATH
     if _loaded:
         return
     _loaded = True
+    if _CONFIG_DIR is None:
+        _CONFIG_DIR = _get_config_dir()
+        _CONFIG_PATH = os.path.join(_CONFIG_DIR, 'config.json')
     os.makedirs(_CONFIG_DIR, exist_ok=True)
     if os.path.exists(_CONFIG_PATH):
         try:

@@ -68,18 +68,41 @@ def get_animation_speed_factor() -> float:
     rate = get_monitor_refresh_rate()
     return 60.0 / rate
 
+def get_app_dir() -> str:
+    """EXE veya script dizinini döndürür (config/db için)"""
+    import sys
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def get_resource_dir() -> str:
+    """Paketlenmiş kaynakların (locales, icons) dizinini döndürür"""
+    import sys
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return get_app_dir()
+
+
 def is_valid_url(url: str) -> bool:
-    """Desteklenen bir platform URL'si mi kontrol eder (YouTube, Shorts, Vimeo, Twitter/X, Dailymotion)"""
+    """Desteklenen tüm platformların URL'lerini kabul eder"""
     if not url or not url.strip():
         return False
     url = url.strip()
     if not url.startswith(('http://', 'https://')):
         return False
     supported = (
-        r'(youtube\.com|youtu\.be)',
-        r'vimeo\.com',
+        r'(youtube\.com|youtu\.be|music\.youtube\.com)',
+        r'soundcloud\.com',
+        r'open\.spotify\.com',   # accepted for UI display, DRM-blocked at download time
+        r'bandcamp\.com',
+        r'tiktok\.com',
+        r'instagram\.com',
         r'(twitter\.com|x\.com)',
+        r'vimeo\.com',
         r'dailymotion\.com',
+        r'twitch\.tv',
+        r'(reddit\.com|redd\.it)',
     )
     return any(re.search(p, url) for p in supported)
 
@@ -88,19 +111,35 @@ def detect_platform(url: str) -> str:
     """URL'den platform adını döndür"""
     if not url:
         return 'unknown'
+    if 'music.youtube.com' in url:
+        return 'youtube_music'
     if 'youtube.com' in url or 'youtu.be' in url:
         return 'youtube_shorts' if '/shorts/' in url else 'youtube'
-    if 'vimeo.com' in url:
-        return 'vimeo'
+    if 'soundcloud.com' in url:
+        return 'soundcloud'
+    if 'spotify.com' in url:
+        return 'spotify'
+    if 'bandcamp.com' in url:
+        return 'bandcamp'
+    if 'tiktok.com' in url:
+        return 'tiktok'
+    if 'instagram.com' in url:
+        return 'instagram'
     if 'twitter.com' in url or 'x.com' in url:
         return 'twitter'
+    if 'vimeo.com' in url:
+        return 'vimeo'
     if 'dailymotion.com' in url:
         return 'dailymotion'
+    if 'twitch.tv' in url:
+        return 'twitch'
+    if 'reddit.com' in url or 'redd.it' in url:
+        return 'reddit'
     return 'unknown'
 
-def format_size(bytes_size: int) -> str:
+def format_size(bytes_size) -> str:
     """Byte cinsinden dosya boyutunu okunaklı hale getirir"""
-    if bytes_size < 0:
+    if bytes_size is None or bytes_size < 0:
         return "Bilinmiyor"
     
     size_units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -113,9 +152,9 @@ def format_size(bytes_size: int) -> str:
         
     return f"{size:.2f} {size_units[index]}"
 
-def format_duration(seconds: int) -> str:
+def format_duration(seconds) -> str:
     """Saniye cinsinden süreyi okunaklı hale getirir"""
-    if seconds < 0:
+    if seconds is None or seconds < 0:
         return "Bilinmiyor"
     
     minutes, seconds = divmod(seconds, 60)
