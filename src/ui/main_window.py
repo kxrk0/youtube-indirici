@@ -100,6 +100,11 @@ class MainWindow(FluentWindow):
         self.settings_interface = SettingsInterface(self)
 
         self.init_navigation()
+
+        # Mini pencere + Bildirim merkezi — init_system_tray'den ÖNCE olmalı
+        self._mini_window = MiniWindow()
+        self._notif_panel = NotificationPanel(self)
+
         self.init_system_tray()
         self.init_keyboard_shortcuts()
         self.check_for_updates_on_startup()
@@ -108,10 +113,6 @@ class MainWindow(FluentWindow):
 
         # Connect history retry signal
         self.history_interface.retry_requested.connect(self._handle_retry)
-
-        # Mini pencere + Bildirim merkezi
-        self._mini_window = MiniWindow()
-        self._notif_panel = NotificationPanel(self)
 
         # Kısayollar
         QShortcut(QKeySequence("Ctrl+M"), self).activated.connect(self._mini_window.toggle)
