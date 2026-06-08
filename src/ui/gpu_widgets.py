@@ -14,36 +14,28 @@ from src.utils.helpers import get_monitor_refresh_rate, get_optimal_timer_interv
 
 
 def setup_smooth_scroll(scroll_area, enable_kinetic: bool = True):
-    """GPU-optimized smooth scrolling'i scroll_area'ya ekler."""
-    refresh_rate = get_monitor_refresh_rate()
-
+    """Scroll area optimizasyonları — tık gecikmesi olmadan akıcı kaydırma."""
     scroll_area.setFrameShape(QFrame.Shape.NoFrame)
     scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-    viewport = scroll_area.viewport()
-    if viewport:
-        viewport.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
-
-    vbar = scroll_area.verticalScrollBar()
-    if vbar:
-        step = max(15, int(100 / (refresh_rate / 60)))
-        vbar.setSingleStep(step)
-
+    # NOT: LeftMouseButtonGesture kullanmıyoruz — tüm fare tıklamalarını
+    # ~300ms geciktirir (QScroller drag/click ayırt etmeye çalışır).
+    # TouchGesture sadece dokunmatik ekranları etkiler, masaüstünde sorun yok.
     if enable_kinetic:
         try:
             scroller = QScroller.scroller(scroll_area.viewport())
             props = scroller.scrollerProperties()
-            decel = 0.988 if refresh_rate >= 144 else 0.982 if refresh_rate >= 120 else 0.975
-            props.setScrollMetric(QScrollerProperties.ScrollMetric.DecelerationFactor, decel)
-            props.setScrollMetric(QScrollerProperties.ScrollMetric.MinimumVelocity, 0.1)
-            props.setScrollMetric(QScrollerProperties.ScrollMetric.MaximumVelocity, 0.8)
-            props.setScrollMetric(QScrollerProperties.ScrollMetric.OvershootDragResistanceFactor, 0.35)
-            props.setScrollMetric(QScrollerProperties.ScrollMetric.OvershootScrollDistanceFactor, 0.15)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.DecelerationFactor, 0.85)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.MinimumVelocity, 0.05)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.MaximumVelocity, 2.5)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.OvershootDragResistanceFactor, 1.0)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.OvershootScrollDistanceFactor, 0.0)
             scroller.setScrollerProperties(props)
+            # TouchGesture: dokunmatik ekranlarda kinetic, fareye dokunmaz
             QScroller.grabGesture(
                 scroll_area.viewport(),
-                QScroller.ScrollerGestureType.LeftMouseButtonGesture
+                QScroller.ScrollerGestureType.TouchGesture
             )
         except Exception as e:
             print(f"Kinetic scroll error: {e}")
@@ -101,111 +93,37 @@ class SmoothScrollArea(QScrollArea):
         
     def _setup_widget_attributes(self):
         """Configure widget attributes for optimal rendering."""
-        # Reduce unnecessary repaints
-        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
-        
-        # Enable static contents optimization (content doesn't change during scroll)
-        self.setAttribute(Qt.WidgetAttribute.WA_StaticContents, True)
-        
-        # Scroll optimization
+        # WA_StaticContents KULLANMA — dinamik içerikte (progress bar, animasyon)
+        # Qt gerekli repaintları atlıyor, visual glitch oluşuyor.
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        
-        # Faster updates
         self.setFrameShape(QScrollArea.Shape.NoFrame)
         
     def _setup_kinetic_scrolling(self):
-        """Enable smooth kinetic (momentum) scrolling like mobile devices."""
+        """Dokunmatik kinetic kaydırma — fareye müdahale etmez."""
         try:
-            # Grab gesture for touch-like scrolling
             scroller = QScroller.scroller(self.viewport())
-            
-            # Configure scroller properties for smooth experience
             props = scroller.scrollerProperties()
-            
-            # Adjust deceleration based on refresh rate
-            # Higher refresh rate = smoother deceleration = can be longer
-            decel_factor = 0.985 if self._refresh_rate >= 120 else 0.975
-            props.setScrollMetric(
-                QScrollerProperties.ScrollMetric.DecelerationFactor,
-                decel_factor
-            )
-            
-            # Minimum velocity to start scrolling (lower = more responsive)
-            props.setScrollMetric(
-                QScrollerProperties.ScrollMetric.MinimumVelocity,
-                0.1
-            )
-            
-            # Maximum velocity cap
-            props.setScrollMetric(
-                QScrollerProperties.ScrollMetric.MaximumVelocity,
-                1.0
-            )
-            
-            # Frame rate for scroll animation
-            fps = min(self._refresh_rate, 240)  # Cap at 240
-            frame_rate = 1000.0 / fps
-            props.setScrollMetric(
-                QScrollerProperties.ScrollMetric.FrameRate,
-                frame_rate
-            )
-            
-            # Overshoot (bounce effect at edges)
-            props.setScrollMetric(
-                QScrollerProperties.ScrollMetric.OvershootDragResistanceFactor,
-                0.5
-            )
-            props.setScrollMetric(
-                QScrollerProperties.ScrollMetric.OvershootScrollDistanceFactor,
-                0.2
-            )
-            
-            # Apply properties
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.DecelerationFactor, 0.85)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.MinimumVelocity, 0.05)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.MaximumVelocity, 2.5)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.OvershootDragResistanceFactor, 1.0)
+            props.setScrollMetric(QScrollerProperties.ScrollMetric.OvershootScrollDistanceFactor, 0.0)
             scroller.setScrollerProperties(props)
-            
-            # Enable touch gesture (works with mouse wheel too)
+            # TouchGesture — LeftMouseButtonGesture değil (tık gecikmesi yaratır)
             QScroller.grabGesture(
                 self.viewport(),
-                QScroller.ScrollerGestureType.LeftMouseButtonGesture
+                QScroller.ScrollerGestureType.TouchGesture
             )
-            
         except Exception as e:
             print(f"Kinetic scrolling setup failed: {e}")
     
     def _setup_scroll_optimization(self):
-        """Additional scroll optimizations."""
-        # Smooth scroll step size based on refresh rate
-        # Higher Hz = smaller steps = smoother
-        scroll_step = max(20, int(120 / (self._refresh_rate / 60)))
-        
+        """Scroll adım boyutu optimizasyonu."""
         vbar = self.verticalScrollBar()
         if vbar:
-            vbar.setSingleStep(scroll_step)
-            
-    def wheelEvent(self, event):
-        """Override wheel event for smoother scrolling."""
-        # Get scroll delta
-        delta = event.angleDelta().y()
-        
-        # Calculate smooth scroll amount based on refresh rate
-        # Higher refresh rate = can handle more granular scrolling
-        if self._refresh_rate >= 144:
-            multiplier = 0.8  # Smoother scrolling for high Hz
-        elif self._refresh_rate >= 120:
-            multiplier = 1.0
-        else:
-            multiplier = 1.2  # Faster response for 60Hz
-            
-        # Apply scroll
-        vbar = self.verticalScrollBar()
-        if vbar:
-            current = vbar.value()
-            # Negative delta = scroll down, positive = scroll up
-            new_value = current - int(delta * multiplier * 0.5)
-            vbar.setValue(new_value)
-            
-        event.accept()
+            vbar.setSingleStep(40)
+            vbar.setPageStep(300)
 
 
 class OptimizedScrollArea(QScrollArea):
@@ -245,13 +163,5 @@ class OptimizedScrollArea(QScrollArea):
             pass
     
     def wheelEvent(self, event):
-        """Smoother mouse wheel scrolling."""
-        delta = event.angleDelta().y()
-        vbar = self.verticalScrollBar()
-        
-        if vbar:
-            # Smoother scroll step
-            step = int(delta * 0.4)
-            vbar.setValue(vbar.value() - step)
-            
-        event.accept()
+        """Standart tekerlek kaydırma — Qt default davranışını kullan."""
+        super().wheelEvent(event)

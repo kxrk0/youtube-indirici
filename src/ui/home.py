@@ -16,7 +16,6 @@ from src.ui.gpu_widgets import setup_smooth_scroll
 from src.ui.workers import InfoFetchWorker, SpotifyInfoWorker
 from src.utils.helpers import (
     is_valid_url, get_os_download_dir, get_clipboard_text,
-    get_optimal_timer_interval, get_animation_speed_factor,
 )
 from src.ui.components import VideoInfoCard
 from src.ui.dialogs import PlaylistSelectionDialog
@@ -33,9 +32,9 @@ class SkeletonWidget(QWidget):
         self.radius = radius
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_opacity)
-        self.timer.start(get_optimal_timer_interval())
+        self.timer.start(16)  # ~60fps — animasyon için yeterli, daha sık repaint gereksiz
         self.opacity = 1.0
-        self.direction = -0.015 * get_animation_speed_factor()
+        self.direction = -0.015  # 60fps baz alınmış sabit adım
         self.min_opacity = 0.3
         self.max_opacity = 0.9
 

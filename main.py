@@ -322,25 +322,19 @@ def main():
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
     os.environ["QT_SCALE_FACTOR_ROUNDING_POLICY"] = "PassThrough"
     
-    # GPU Surface Ayarları - Yüksek Hz monitörler için
+    # GPU Surface Ayarları
     format = QSurfaceFormat()
-    format.setRenderableType(QSurfaceFormat.RenderableType.OpenGLES)
-    format.setVersion(3, 0)  # OpenGL ES 3.0
     format.setSwapBehavior(QSurfaceFormat.SwapBehavior.DoubleBuffer)
-    
-    # VSync: 0 = kapalı (unlocked FPS), 1 = açık (tearing önleme)
-    # 180Hz monitör için VSync kapalı daha iyi çünkü GPU yeterince güçlü
-    format.setSwapInterval(0)  # VSync KAPALI - maksimum FPS
-    
-    format.setSamples(4)  # 4x MSAA
-    format.setDepthBufferSize(24)
-    format.setStencilBufferSize(8)
+    format.setSwapInterval(1)   # VSync AÇIK — tearing önler, algılanan akıcılık artar
+    # MSAA widget rendering'de etkisiz (Qt raster renderer kullanır),
+    # sadece GPU yükü ekler — kaldırıldı
+    format.setDepthBufferSize(0)
+    format.setStencilBufferSize(0)
     format.setAlphaBufferSize(8)
     QSurfaceFormat.setDefaultFormat(format)
-    
+
     # PyQt uygulamasını başlat
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseOpenGLES)  # ANGLE için
     
     qt_app = QApplication(sys.argv)
     qt_app.setApplicationName("YouTube İndirici")
