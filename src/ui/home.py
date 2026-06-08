@@ -7,7 +7,7 @@ from PyQt6.QtGui import QColor, QPainter, QBrush
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog
 
 from qfluentwidgets import (
-    ScrollArea, CardWidget, TitleLabel, SubtitleLabel, BodyLabel, StrongBodyLabel,
+    ScrollArea, SmoothScrollArea, CardWidget, TitleLabel, SubtitleLabel, BodyLabel, StrongBodyLabel,
     LineEdit, PrimaryPushButton, PushButton, ComboBox, CheckBox,
     FluentIcon, InfoBar, TimePicker, MessageBoxBase, TextEdit
 )
@@ -94,7 +94,7 @@ class ScheduleDialog(MessageBoxBase):
         return self.time_picker.time()
 
 
-class HomeInterface(ScrollArea):
+class HomeInterface(SmoothScrollArea):
     """Ana sayfa - URL girişi ve hızlı indirme"""
 
     _info_cache: dict = {}        # url → {'info': dict, 'formats': list, 'ts': float}
@@ -112,7 +112,8 @@ class HomeInterface(ScrollArea):
         self.view.setObjectName("homeView")
         self.setStyleSheet("ScrollArea{background: transparent; border: none;}")
         self.view.setStyleSheet("QWidget#homeView{background: transparent;}")
-        setup_smooth_scroll(self, enable_kinetic=True)
+        setup_smooth_scroll(self, enable_kinetic=False)
+        self.setScrollAnimation(Qt.Orientation.Vertical, 500)
         self._current_info = None
         self._is_live = False
         self.worker = None

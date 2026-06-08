@@ -8,7 +8,7 @@ from PyQt6.QtGui import QColor, QPainter, QPen, QPainterPath, QPixmap, QDrag, QC
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QLabel, QSizePolicy
 
 from qfluentwidgets import (
-    ScrollArea, CardWidget, TitleLabel, BodyLabel, StrongBodyLabel,
+    ScrollArea, SmoothScrollArea, CardWidget, TitleLabel, BodyLabel, StrongBodyLabel,
     ProgressBar, IconWidget, FluentIcon, TransparentToolButton,
 )
 
@@ -289,7 +289,7 @@ class DownloadItemCard(CardWidget):
             self.thumb_lbl.setPixmap(scaled)
 
 
-class QueueInterface(ScrollArea):
+class QueueInterface(SmoothScrollArea):
     """İndirme kuyruğu sayfası"""
 
     def __init__(self, parent=None):
@@ -301,7 +301,8 @@ class QueueInterface(ScrollArea):
         self.view.setObjectName("queueView")
         self.setStyleSheet("ScrollArea{background: transparent; border: none;}")
         self.view.setStyleSheet("QWidget#queueView{background: transparent;}")
-        setup_smooth_scroll(self, enable_kinetic=True)
+        setup_smooth_scroll(self, enable_kinetic=False)
+        self.setScrollAnimation(Qt.Orientation.Vertical, 500)
 
         self.v_layout = QVBoxLayout(self.view)
         self.v_layout.setContentsMargins(36, 36, 36, 36)

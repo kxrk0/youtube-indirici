@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from qfluentwidgets import (
-    ScrollArea, CardWidget, TitleLabel, SubtitleLabel, BodyLabel, StrongBodyLabel,
+    ScrollArea, SmoothScrollArea, CardWidget, TitleLabel, SubtitleLabel, BodyLabel, StrongBodyLabel,
     PushButton, LineEdit, FluentIcon, InfoBar, TransparentToolButton,
     SettingCardGroup, SettingCard
 )
@@ -158,7 +158,7 @@ class HistoryItemCard(CardWidget):
                 os.startfile(folder)
 
 
-class HistoryInterface(ScrollArea):
+class HistoryInterface(SmoothScrollArea):
     """İndirme geçmişi sayfası"""
     retry_requested = pyqtSignal(str)   # propagates card signal up to MainWindow
 
@@ -171,7 +171,8 @@ class HistoryInterface(ScrollArea):
         self.view.setObjectName("historyView")
         self.setStyleSheet("ScrollArea{background: transparent; border: none;}")
         self.view.setStyleSheet("QWidget#historyView{background: transparent;}")
-        setup_smooth_scroll(self, enable_kinetic=True)
+        setup_smooth_scroll(self, enable_kinetic=False)
+        self.setScrollAnimation(Qt.Orientation.Vertical, 500)
 
         self.v_layout = QVBoxLayout(self.view)
         self.v_layout.setContentsMargins(36, 36, 36, 36)

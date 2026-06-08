@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from qfluentwidgets import (
-    ScrollArea, CardWidget, TitleLabel, BodyLabel,
+    ScrollArea, SmoothScrollArea, CardWidget, TitleLabel, BodyLabel,
     PushButton, PushSettingCard, HyperlinkCard, SettingCardGroup, SettingCard,
     SwitchButton, ComboBox, Slider, LineEdit, FluentIcon,
     setTheme, Theme, setThemeColor, InfoBar, InfoBarPosition
@@ -270,7 +270,7 @@ class ProxySettingCard(SettingCard):
         InfoBar.error(title="Proxy Test Başarısız", content=msg[:200], duration=5000, parent=self.window())
 
 
-class SettingsInterface(ScrollArea):
+class SettingsInterface(SmoothScrollArea):
     """Ayarlar sayfası - config.py ile kalıcı saklama"""
 
     def __init__(self, parent=None):
@@ -282,7 +282,8 @@ class SettingsInterface(ScrollArea):
         self.view.setObjectName("settingsView")
         self.setStyleSheet("ScrollArea{background: transparent; border: none;}")
         self.view.setStyleSheet("QWidget#settingsView{background: transparent;}")
-        setup_smooth_scroll(self, enable_kinetic=True)
+        setup_smooth_scroll(self, enable_kinetic=False)
+        self.setScrollAnimation(Qt.Orientation.Vertical, 500)
 
         from PyQt6.QtWidgets import QVBoxLayout
         self.v_layout = QVBoxLayout(self.view)

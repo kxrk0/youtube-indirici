@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from qfluentwidgets import (
-    ScrollArea, CardWidget, TitleLabel, SubtitleLabel, BodyLabel, PushButton,
+    ScrollArea, SmoothScrollArea, CardWidget, TitleLabel, SubtitleLabel, BodyLabel, PushButton,
     FluentIcon, TransparentToolButton, FlowLayout, InfoBar,
     SearchLineEdit, ComboBox
 )
@@ -436,7 +436,7 @@ class _FormatConverterCard(CardWidget):
                 event.acceptProposedAction()
 
 
-class LibraryInterface(ScrollArea):
+class LibraryInterface(SmoothScrollArea):
     """Kütüphane sayfası"""
 
     def __init__(self, parent=None):
@@ -448,7 +448,8 @@ class LibraryInterface(ScrollArea):
         self.view.setObjectName("libraryView")
         self.setStyleSheet("ScrollArea{background: transparent; border: none;}")
         self.view.setStyleSheet("QWidget#libraryView{background: transparent;}")
-        setup_smooth_scroll(self, enable_kinetic=True)
+        setup_smooth_scroll(self, enable_kinetic=False)
+        self.setScrollAnimation(Qt.Orientation.Vertical, 500)
 
         self.v_layout = QVBoxLayout(self.view)
         self.v_layout.setContentsMargins(30, 30, 30, 30)
