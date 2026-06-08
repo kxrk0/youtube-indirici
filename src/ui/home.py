@@ -4,7 +4,7 @@ import os
 
 from PyQt6.QtCore import Qt, QTimer, QTime, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QBrush
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame, QFileDialog, QLabel
 
 from qfluentwidgets import (
     ScrollArea, CardWidget, TitleLabel, SubtitleLabel, BodyLabel, StrongBodyLabel,
@@ -126,8 +126,34 @@ class HomeInterface(ScrollArea):
         self.v_layout.setSpacing(20)
         self.v_layout.setContentsMargins(30, 30, 30, 30)
 
+        # ── Header: Başlık + Stats Bar (Hone-inspired) ───────────────────────
+        header_row = QHBoxLayout()
         self.title_label = TitleLabel("YDL İndirici", self.view)
-        self.v_layout.addWidget(self.title_label)
+        header_row.addWidget(self.title_label)
+        header_row.addStretch()
+
+        # Stats chips — numbered Hone card style
+        self._stats_bar = QFrame(self.view)
+        self._stats_bar.setStyleSheet(
+            "QFrame { background: transparent; }"
+        )
+        stats_lay = QHBoxLayout(self._stats_bar)
+        stats_lay.setContentsMargins(0, 0, 0, 0)
+        stats_lay.setSpacing(10)
+
+        self._stat_session = self._make_stat_chip("0", "Bu Oturum", "⬇️")
+        self._stat_total   = self._make_stat_chip("0", "Toplam", "🏆")
+        self._stat_disk    = self._make_stat_chip("—", "Disk", "💾")
+
+        stats_lay.addWidget(self._stat_session)
+        stats_lay.addWidget(self._stat_total)
+        stats_lay.addWidget(self._stat_disk)
+        header_row.addWidget(self._stats_bar)
+        self.v_layout.addLayout(header_row)
+
+        # Disk stat arka planda yükle
+        import threading
+        threading.Thread(target=self._load_stats, daemon=True).start()
 
         # URL giriş kartı
         self.input_card = CardWidget(self.view)
@@ -652,6 +678,72 @@ class HomeInterface(ScrollArea):
                 content=msg,
                 duration=4000, parent=self
             )
+
+    # ─── Stats Bar Helpers ────────────────────────────────────────────────────
+
+    def _make_stat_chip(self, value: str, label: str, icon: str) -> CardWidget:
+        chip = CardWidget(self.view)
+        chip.setFixedHeight(56)
+        lay = QHBoxLayout(chip)
+        lay.setContentsMargins(14, 8, 14, 8)
+        lay.setSpacing(8)
+
+        icon_lbl = QLabel(icon, chip)
+        icon_lbl.setStyleSheet("font-size: 18px;")
+        lay.addWidget(icon_lbl)
+
+        txt = QVBoxLayout()
+        txt.setSpacing(0)
+        val_lbl = StrongBodyLabel(value, chip)
+        val_lbl.setStyleSheet("font-size: 15px; font-weight: bold;")
+        lbl_lbl = BodyLabel(label, chip)
+        lbl_lbl.setStyleSheet("color: #666; font-size: 10px;")
+        txt.addWidget(val_lbl)
+        txt.addWidget(lbl_lbl)
+        lay.addLayout(txt)
+
+        chip._val_lbl = val_lbl
+        return chip
+
+    def _update_stat(self, chip: CardWidget, value: str):
+        chip._val_lbl.setText(value)
+
+    def _load_stats(self):
+        """Arka planda achievement + disk istatistiklerini yükle."""
+        try:
+            from src.core.achievements import get_stats
+            from src.utils.helpers import format_size
+            stats = get_stats()
+            total = str(stats['total_downloads'])
+
+            # Disk kullanımı — indirme klasörü
+            import src.utils.config as _cfg
+            dl_dir = _cfg.get('download_dir', '')
+            disk_str = '—'
+            if dl_dir and os.path.isdir(dl_dir):
+                size = sum(
+                    os.path.getsize(os.path.join(r, f))
+                    for r, _, files in os.walk(dl_dir)
+                    for f in files
+                    if not f.startswith('.')
+                )
+                disk_str = format_size(size)
+
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: (
+                self._update_stat(self._stat_total, total),
+                self._update_stat(self._stat_disk, disk_str),
+            ))
+        except Exception as e:
+            print(f"[Stats] {e}")
+
+    def increment_session_stat(self):
+        """İndirme tamamlanınca çağır — oturum sayacını artır."""
+        try:
+            cur = int(self._stat_session._val_lbl.text())
+            self._update_stat(self._stat_session, str(cur + 1))
+        except Exception:
+            pass
 
     # ─── Kanal İndirme ───────────────────────────────────────────────────────
 

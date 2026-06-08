@@ -616,6 +616,25 @@ class MainWindow(FluentWindow):
             except Exception:
                 pass
             self.history_interface.is_loaded = False
+            # Oturum istatistiği güncelle
+            try:
+                if hasattr(self.home_interface, 'increment_session_stat'):
+                    self.home_interface.increment_session_stat()
+            except Exception:
+                pass
+            # Achievement sistemi
+            try:
+                from src.core.achievements import on_download_complete
+                platform = url.split('/')[2] if url else ''
+                new_ach = on_download_complete(format_type=type_str, platform=platform)
+                for ach in new_ach:
+                    InfoBar.success(
+                        title=f"{ach['icon']} Başarım Açıldı: {ach['title']}",
+                        content=ach['desc'],
+                        duration=5000, parent=self
+                    )
+            except Exception:
+                pass
             # Şarkı sözleri — ses indirmelerinde otomatik .lrc kaydet
             if filepath and type_str == 'audio' and (meta_title or meta_channel):
                 def _fetch_lrc(fp=filepath, t=meta_title or display_title,
