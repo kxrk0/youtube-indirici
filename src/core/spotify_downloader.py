@@ -62,11 +62,11 @@ def _http_get_json(url: str, params: dict = None, timeout: int = 15) -> Optional
 
 
 def get_track_info(spotify_url: str, _original_url: str = None) -> Optional[Dict]:
-    spotify_url = _normalize_spotify_url(spotify_url)
     """
     Spotify oEmbed ile şarkı başlığı, sanatçı ve kapak resmi alır.
     Auth gerektirmez. Döndürdüğü dict VideoInfoCard.update_info() ile uyumludur.
     """
+    spotify_url = _normalize_spotify_url(spotify_url)
     data = _http_get_json(_OEMBED_URL, {'url': spotify_url})
     if not data:
         return None

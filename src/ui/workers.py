@@ -148,8 +148,8 @@ class DownloadWorker(QThread):
         if self.proxy:
             return self.proxy
         try:
-            from src.core.config import get_config
-            pool = [p.strip() for p in get_config().get('proxy_pool', '').splitlines() if p.strip()]
+            from src.utils import config as _cfg
+            pool = [p.strip() for p in _cfg.get('proxy_pool', '').splitlines() if p.strip()]
             if pool:
                 import random
                 return random.choice(pool)
@@ -174,8 +174,8 @@ class DownloadWorker(QThread):
             # On retry pick a different proxy from pool
             if attempt > 0:
                 try:
-                    from src.core.config import get_config
-                    pool = [p.strip() for p in get_config().get('proxy_pool', '').splitlines() if p.strip()]
+                    from src.utils import config as _cfg
+                    pool = [p.strip() for p in _cfg.get('proxy_pool', '').splitlines() if p.strip()]
                     if pool:
                         import random
                         effective_proxy = random.choice(pool)
