@@ -372,10 +372,6 @@ def main():
     window_geometry = window.frameGeometry()
     window_geometry.moveCenter(screen_geometry.center())
     window.move(window_geometry.topLeft())
-
-    # İlk açılış sihirbazı (Onboarding)
-    from src.ui.onboarding import run_onboarding_if_needed
-    run_onboarding_if_needed(parent=window)
     
     # Flask API sunucusunu ayrı bir thread'de başlat
     flask_thread = threading.Thread(target=start_flask_server)
