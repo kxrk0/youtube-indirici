@@ -11,6 +11,52 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from src.utils.helpers import extract_video_thumbnail, get_ffmpeg_path, detect_platform
 
 
+def _extract_audio_cover(audio_path: str, out_jpg: str) -> bool:
+    """ID3/MP4 tag'inden kapak resmini çıkarır. Başarıda True."""
+    ext = audio_path.lower().rsplit('.', 1)[-1]
+    try:
+        if ext in ('mp3',):
+            from mutagen.id3 import ID3
+            tags = ID3(audio_path)
+            for key in tags:
+                if key.startswith('APIC'):
+                    data = tags[key].data
+                    if data:
+                        with open(out_jpg, 'wb') as f:
+                            f.write(data)
+                        return True
+        elif ext in ('m4a', 'mp4', 'aac'):
+            from mutagen.mp4 import MP4
+            tags = MP4(audio_path)
+            covr = tags.get('covr')
+            if covr:
+                with open(out_jpg, 'wb') as f:
+                    f.write(bytes(covr[0]))
+                return True
+        elif ext in ('flac',):
+            from mutagen.flac import FLAC
+            audio = FLAC(audio_path)
+            pics = audio.pictures
+            if pics:
+                with open(out_jpg, 'wb') as f:
+                    f.write(pics[0].data)
+                return True
+        elif ext in ('ogg',):
+            from mutagen.oggvorbis import OggVorbis
+            import base64
+            audio = OggVorbis(audio_path)
+            metadata_block = audio.get('metadata_block_picture')
+            if metadata_block:
+                from mutagen.flac import Picture
+                pic = Picture(base64.b64decode(metadata_block[0]))
+                with open(out_jpg, 'wb') as f:
+                    f.write(pic.data)
+                return True
+    except Exception:
+        pass
+    return False
+
+
 class ThumbnailWorker(QThread):
     thumbnail_ready = pyqtSignal(str, str)
 
@@ -33,8 +79,10 @@ class ThumbnailWorker(QThread):
 
             if os.path.exists(thumb_path):
                 self.thumbnail_ready.emit(video_path, thumb_path)
-            elif video_path.lower().endswith('.mp3'):
-                self.thumbnail_ready.emit(video_path, "AUDIO")
+            elif video_path.lower().endswith(('.mp3', '.m4a', '.flac', '.ogg')):
+                # MP3/ses: ID3 kapak resmini çıkar, yoksa AUDIO fallback
+                extracted = _extract_audio_cover(video_path, thumb_path)
+                self.thumbnail_ready.emit(video_path, thumb_path if extracted else "AUDIO")
             else:
                 success = extract_video_thumbnail(video_path, thumb_path)
                 self.thumbnail_ready.emit(video_path, thumb_path if success else "ERROR")

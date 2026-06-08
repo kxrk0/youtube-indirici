@@ -25,19 +25,23 @@ class LibraryItem(CardWidget):
     def __init__(self, path, parent=None):
         super().__init__(parent)
         self.path = path
-        self.setFixedSize(200, 180)
+        self.setFixedSize(220, 190)
         self.v_layout = QVBoxLayout(self)
         self.v_layout.setContentsMargins(0, 0, 0, 0)
         self.v_layout.setSpacing(0)
 
         self.thumb_label = QLabel(self)
-        self.thumb_label.setFixedSize(200, 112)
+        self.thumb_label.setFixedSize(220, 124)
         self.thumb_label.setStyleSheet(
-            "background-color: #202020; border-top-left-radius: 8px; border-top-right-radius: 8px;"
+            "background-color: #1a1a1a; border-top-left-radius: 8px; border-top-right-radius: 8px;"
         )
         self.thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.thumb_label.setScaledContents(True)
-        self.thumb_label.setPixmap(FluentIcon.VIDEO.icon().pixmap(48, 48))
+        self.thumb_label.setScaledContents(False)  # Manuel scale — aspect ratio koru
+
+        # Varsayılan ikon — uzantıya göre seç
+        ext = os.path.splitext(path)[1].lower()
+        default_icon = FluentIcon.MUSIC if ext in ('.mp3', '.m4a', '.flac') else FluentIcon.VIDEO
+        self.thumb_label.setPixmap(default_icon.icon().pixmap(64, 64))
         self.v_layout.addWidget(self.thumb_label)
 
         info_widget = QWidget()
@@ -69,9 +73,15 @@ class LibraryItem(CardWidget):
 
     def set_thumbnail(self, image_path):
         if image_path == "AUDIO":
-            self.thumb_label.setPixmap(FluentIcon.MUSIC.icon().pixmap(48, 48))
-        elif os.path.exists(image_path):
-            self.thumb_label.setPixmap(QPixmap(image_path))
+            self.thumb_label.setPixmap(FluentIcon.MUSIC.icon().pixmap(64, 64))
+        elif image_path and image_path != "ERROR" and os.path.exists(image_path):
+            w, h = self.thumb_label.width(), self.thumb_label.height()
+            scaled = QPixmap(image_path).scaled(
+                w, h,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.thumb_label.setPixmap(scaled)
 
     def contextMenuEvent(self, event):
         """Sağ tık menüsü - format dönüştürücü"""

@@ -15,6 +15,15 @@ datas = [
     ('cache', 'cache'),
 ] + qfw_datas
 
+# FFmpeg ikili dosyalarını EXE yanına ekle
+import glob as _glob
+_ffmpeg_src = next(iter(_glob.glob(os.path.join('.', 'ffmpeg*', 'bin'))), None)
+if _ffmpeg_src:
+    for _f in ('ffmpeg.exe', 'ffprobe.exe'):
+        _fp = os.path.join(_ffmpeg_src, _f)
+        if os.path.exists(_fp):
+            datas.append((_fp, 'ffmpeg-bin'))
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],

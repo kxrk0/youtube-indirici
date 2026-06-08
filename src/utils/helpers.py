@@ -179,21 +179,30 @@ def get_os_download_dir() -> str:
         return os.getcwd()  # Varsayılan olarak mevcut dizin
 
 def _find_ffmpeg_bin_dir() -> Optional[str]:
-    """Proje kök dizininde herhangi bir ffmpeg*/bin dizinini dinamik olarak arar."""
-    import glob
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.dirname(os.path.dirname(current_dir))
+    """FFmpeg bin dizinini bulur. EXE ve kaynak modda çalışır."""
+    import glob, sys
     exe_name = 'ffmpeg.exe' if platform.system() == 'Windows' else 'ffmpeg'
 
-    # Önce sabit isim dene, sonra wildcard
-    candidates = [
-        os.path.join(root_dir, 'ffmpeg', 'bin'),
-        os.path.join(root_dir, 'ffmpeg-bin'),
-    ] + glob.glob(os.path.join(root_dir, 'ffmpeg*', 'bin'))
+    root_dirs = []
+    if getattr(sys, 'frozen', False):
+        # EXE modu: _MEIPASS (datas → ffmpeg-bin) ve EXE'nin yanı
+        if hasattr(sys, '_MEIPASS'):
+            root_dirs.append(sys._MEIPASS)
+        root_dirs.append(os.path.dirname(sys.executable))
+    else:
+        # Kaynak modu: proje kökü
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dirs.append(os.path.dirname(os.path.dirname(current_dir)))
 
-    for candidate in candidates:
-        if os.path.exists(os.path.join(candidate, exe_name)):
-            return candidate
+    for root_dir in root_dirs:
+        candidates = [
+            os.path.join(root_dir, 'ffmpeg-bin'),
+            os.path.join(root_dir, 'ffmpeg', 'bin'),
+        ] + glob.glob(os.path.join(root_dir, 'ffmpeg*', 'bin'))
+        for candidate in candidates:
+            if os.path.exists(os.path.join(candidate, exe_name)):
+                return candidate
+
     return None
 
 
