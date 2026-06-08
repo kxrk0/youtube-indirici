@@ -7,9 +7,12 @@ SQLite ile indirme kaydı tutma
 
 import os
 import sqlite3
+import threading
 from datetime import datetime
 from typing import List, Dict, Optional
 from contextlib import contextmanager
+
+from src.utils.helpers import get_app_dir
 
 
 class DownloadHistory:
@@ -28,25 +31,37 @@ class DownloadHistory:
             db_path: Veritabanı dosya yolu (varsayılan: cache/history.db)
         """
         if db_path is None:
-            # Varsayılan konum
-            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            cache_dir = os.path.join(root_dir, 'cache')
+            # EXE ve kaynak modda doğru kök dizini kullan (frozen EXE'de __file__ _MEIPASS'a işaret eder)
+            cache_dir = os.path.join(get_app_dir(), 'cache')
             os.makedirs(cache_dir, exist_ok=True)
             db_path = os.path.join(cache_dir, 'history.db')
             
         self.db_path = db_path
+        self._local = threading.local()   # Per-thread connection cache
         self._init_db()
-        
+
+    def _get_conn(self) -> sqlite3.Connection:
+        """Thread-local persistent connection — her thread tek conn kullanır."""
+        conn = getattr(self._local, 'conn', None)
+        if conn is None:
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")   # WAL: okuma yazmayla çakışmaz
+            conn.execute("PRAGMA synchronous=NORMAL")  # WAL ile güvenli, fsync sayısı azalır
+            conn.execute("PRAGMA cache_size=-8000")    # 8MB cache
+            self._local.conn = conn
+        return conn
+
     @contextmanager
     def _get_connection(self):
-        """Thread-safe veritabanı bağlantısı"""
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
+        """Thread-local connection context manager (geriye dönük uyumluluk)."""
+        conn = self._get_conn()
         try:
             yield conn
             conn.commit()
-        finally:
-            conn.close()
+        except Exception:
+            conn.rollback()
+            raise
             
     def _init_db(self):
         """Veritabanı tablolarını oluştur"""

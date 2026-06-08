@@ -237,7 +237,7 @@ class Downloader:
                 'format': format_spec,
                 'outtmpl': os.path.join(output_path, tpl),
                 'writethumbnail': True,
-                'concurrent_fragment_downloads': 8,
+                'concurrent_fragment_downloads': self._get_fragment_count(),
                 'http_chunk_size': 10485760,
                 'writeinfojson': save_info,
                 'merge_output_format': 'mp4',
@@ -474,7 +474,7 @@ class Downloader:
                 'format': 'bestaudio/best',
                 'outtmpl': os.path.join(output_path, atpl),
                 'writethumbnail': True,
-                'concurrent_fragment_downloads': 8,
+                'concurrent_fragment_downloads': self._get_fragment_count(),
                 'http_chunk_size': 10485760,
                 'writeinfojson': save_info,
                 'postprocessors': postprocessors,
@@ -562,6 +562,14 @@ class Downloader:
             task.cancel()
             print(f"İndirme iptal edildi: {task_id}")
         self.active_tasks.clear()
+
+    def _get_fragment_count(self) -> int:
+        """Settings'ten fragment download sayısını al, varsayılan 4."""
+        try:
+            from src.utils import config as _cfg
+            return max(1, int(_cfg.get('fragment_downloads', 4)))
+        except Exception:
+            return 4
 
     def download_livestream(self,
                            url: str,

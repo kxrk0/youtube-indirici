@@ -355,6 +355,23 @@ class SettingsInterface(SmoothScrollArea):
         self.concurrent_card.slider.valueChanged.connect(self._on_concurrent_changed)
         group2.addSettingCard(self.concurrent_card)
 
+        self.fragment_card = SliderSettingCard(
+            FluentIcon.SPEED_HIGH, "Fragment İndirme Sayısı",
+            "4 eş zamanlı fragment (yavaş bağlantıda 2, hızlı bağlantıda 16)",
+            config_key='fragment_downloads', parent=self.view
+        )
+        self.fragment_card.slider.setRange(1, 16)
+        saved_fd = int(cfg.get('fragment_downloads', 4))
+        self.fragment_card.slider.setValue(saved_fd)
+        self.fragment_card.setContent(f"{saved_fd} eş zamanlı fragment")
+        self.fragment_card.slider.valueChanged.connect(
+            lambda v: (
+                cfg.set_value('fragment_downloads', v),
+                self.fragment_card.setContent(f"{v} eş zamanlı fragment")
+            )
+        )
+        group2.addSettingCard(self.fragment_card)
+
         self.filename_tpl_card = LineEditSettingCard(
             FluentIcon.EDIT, "Dosya Adı Şablonu",
             "%(title)s.%(ext)s",

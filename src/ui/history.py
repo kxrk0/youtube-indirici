@@ -5,9 +5,9 @@ import io
 import os
 import platform
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog
+    QWidget, QVBoxLayout, QHBoxLayout, QMessageBox, QFileDialog, QScrollBar
 )
 
 from qfluentwidgets import (
@@ -262,6 +262,10 @@ class HistoryInterface(SmoothScrollArea):
 
         self.is_loaded = False
         self._current_rows = []
+        self._rendered_count = 0
+        self._BATCH = 20  # İlk yüklemede ve her scroll genişlemesinde kaç kart eklenir
+        # Scroll sona yaklaşınca daha fazla yükle
+        self.verticalScrollBar().valueChanged.connect(self._on_scroll)
 
     def _stat_widget(self, label: str, value: str) -> QWidget:
         w = QWidget()
@@ -351,12 +355,27 @@ class HistoryInterface(SmoothScrollArea):
             return
 
         self._current_rows = rows
-        for row in rows:
+        self._rendered_count = 0
+        self._render_next_batch()
+
+    def _render_next_batch(self):
+        """Bir sonraki batch kadar kart oluştur — lazy load."""
+        start = self._rendered_count
+        end = min(start + self._BATCH, len(self._current_rows))
+        for row in self._current_rows[start:end]:
             card = HistoryItemCard(row, self.list_widget)
             card.delete_requested.connect(self._delete_row)
             card.open_requested.connect(self._open_file)
             card.retry_requested.connect(self.retry_requested)
             self.list_layout.addWidget(card)
+        self._rendered_count = end
+
+    def _on_scroll(self, value: int):
+        """Scroll sona yaklaşınca yeni batch yükle."""
+        sb = self.verticalScrollBar()
+        if sb.maximum() > 0 and value >= sb.maximum() - 200:
+            if self._rendered_count < len(self._current_rows):
+                self._render_next_batch()
 
     def _delete_row(self, row_id: int):
         reply = QMessageBox.question(
