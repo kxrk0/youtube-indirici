@@ -50,6 +50,7 @@ class MainWindow(FluentWindow):
 
     # Cross-thread signals (emitted from background threads → processed on GUI thread)
     _sub_new_video_signal = pyqtSignal(str, str, str, str)  # url, output_path, format_type, title
+    _clipboard_signal = pyqtSignal(str)  # emitted from background thread
 
     def __init__(self, downloader=None):
         super().__init__()
@@ -127,11 +128,12 @@ class MainWindow(FluentWindow):
         except Exception as e:
             print(f"[Plugins] {e}")
 
-        # Pano monitörü — 2 sn'de bir kontrol et, geçerli URL gelince ana sayfaya yansıt
+        # Pano monitörü — 5 sn'de bir kontrol et, geçerli URL gelince ana sayfaya yansıt
         self._clipboard_prev = ''
         self._clipboard_timer = QTimer(self)
         self._clipboard_timer.timeout.connect(self._check_clipboard)
-        self._clipboard_timer.start(2000)
+        self._clipboard_timer.start(5000)
+        self._clipboard_signal.connect(self._on_clipboard_url)
 
         # Abonelik kontrolü zamanlayıcısı
         self._sub_timer = QTimer(self)
@@ -235,20 +237,32 @@ class MainWindow(FluentWindow):
             self.switchTo(self.home_interface)
 
     def _check_clipboard(self):
-        """Panoda yeni geçerli URL belirdiyse home'a yansıt (kullanıcıya bildir)."""
+        """Pano kontrolü — arka planda çalışır, main thread bloklamamak için."""
+        import threading
+        threading.Thread(target=self._read_clipboard_bg, daemon=True).start()
+
+    def _read_clipboard_bg(self):
+        """Background thread: clipboard oku, URL ise signal gönder."""
         try:
             text = get_clipboard_text()
             if not text or text == self._clipboard_prev:
                 return
             self._clipboard_prev = text
             if is_valid_url(text):
-                home = self.home_interface
-                if hasattr(home, 'url_input') and home.url_input.text() != text:
-                    home.url_input.setText(text)
-                    InfoBar.info(
-                        title='Pano', content='URL panoya kopyalandı — ana sayfaya yapıştırıldı.',
-                        duration=3000, parent=self
-                    )
+                self._clipboard_signal.emit(text)
+        except Exception:
+            pass
+
+    def _on_clipboard_url(self, text: str):
+        """GUI thread: URL tespit edildi, ana sayfaya yansıt."""
+        try:
+            home = self.home_interface
+            if hasattr(home, 'url_input') and home.url_input.text() != text:
+                home.url_input.setText(text)
+                InfoBar.info(
+                    title='Pano', content='URL panoya kopyalandı — ana sayfaya yapıştırıldı.',
+                    duration=3000, parent=self
+                )
         except Exception:
             pass
 

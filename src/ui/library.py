@@ -3,7 +3,7 @@
 import os
 import platform
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QMessageBox, QMenu, QDialog,
@@ -473,7 +473,11 @@ class LibraryInterface(ScrollArea):
         self.search_input = SearchLineEdit(self.view)
         self.search_input.setPlaceholderText("Dosya adı ara...")
         self.search_input.setFixedWidth(240)
-        self.search_input.textChanged.connect(self._apply_filter)
+        self._filter_timer = QTimer(self)
+        self._filter_timer.setSingleShot(True)
+        self._filter_timer.setInterval(300)
+        self._filter_timer.timeout.connect(self._apply_filter)
+        self.search_input.textChanged.connect(lambda _: self._filter_timer.start())
 
         self.type_filter = ComboBox(self.view)
         self.type_filter.addItems(["Tümü", "Video", "Ses"])

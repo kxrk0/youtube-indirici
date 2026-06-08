@@ -338,7 +338,6 @@ def main():
     
     qt_app = QApplication(sys.argv)
     qt_app.setApplicationName("YouTube İndirici")
-    qt_app.setStyle("Fusion")  # Modern görünüm için
 
     # Splash ekranı göster
     from src.ui.splash import SplashScreen
