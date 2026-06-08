@@ -245,52 +245,31 @@ class DownloadHistory:
             cursor.execute('DELETE FROM downloads')
             
     def get_statistics(self) -> Dict:
-        """İndirme istatistiklerini getir"""
+        """İndirme istatistiklerini tek sorguyla getir."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Toplam indirme sayısı
-            cursor.execute('SELECT COUNT(*) FROM downloads')
-            total_downloads = cursor.fetchone()[0]
-            
-            # Başarılı indirmeler
-            cursor.execute("SELECT COUNT(*) FROM downloads WHERE status = 'completed'")
-            successful = cursor.fetchone()[0]
-            
-            # Başarısız indirmeler
-            cursor.execute("SELECT COUNT(*) FROM downloads WHERE status = 'error'")
-            failed = cursor.fetchone()[0]
-            
-            # Toplam dosya boyutu
-            cursor.execute('SELECT SUM(file_size) FROM downloads WHERE file_size IS NOT NULL')
-            total_size = cursor.fetchone()[0] or 0
-            
-            # Toplam süre
-            cursor.execute('SELECT SUM(duration) FROM downloads WHERE duration IS NOT NULL')
-            total_duration = cursor.fetchone()[0] or 0
-            
-            # Bu ay indirilenler
             cursor.execute('''
-                SELECT COUNT(*) FROM downloads 
-                WHERE download_date >= date('now', 'start of month')
+                SELECT
+                    COUNT(*)                                                        AS total_downloads,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END)         AS successful,
+                    SUM(CASE WHEN status = 'error'     THEN 1 ELSE 0 END)         AS failed,
+                    COALESCE(SUM(file_size), 0)                                    AS total_size_bytes,
+                    COALESCE(SUM(duration),  0)                                    AS total_duration_seconds,
+                    SUM(CASE WHEN download_date >= date('now','start of month')
+                             THEN 1 ELSE 0 END)                                    AS this_month,
+                    SUM(CASE WHEN date(download_date) = date('now')
+                             THEN 1 ELSE 0 END)                                    AS today
+                FROM downloads
             ''')
-            this_month = cursor.fetchone()[0]
-            
-            # Bugün indirilenler
-            cursor.execute('''
-                SELECT COUNT(*) FROM downloads 
-                WHERE date(download_date) = date('now')
-            ''')
-            today = cursor.fetchone()[0]
-            
+            row = cursor.fetchone()
             return {
-                'total_downloads': total_downloads,
-                'successful': successful,
-                'failed': failed,
-                'total_size_bytes': total_size,
-                'total_duration_seconds': total_duration,
-                'this_month': this_month,
-                'today': today
+                'total_downloads':        row[0] or 0,
+                'successful':             row[1] or 0,
+                'failed':                 row[2] or 0,
+                'total_size_bytes':       row[3] or 0,
+                'total_duration_seconds': row[4] or 0,
+                'this_month':             row[5] or 0,
+                'today':                  row[6] or 0,
             }
             
     def is_url_downloaded(self, url: str) -> bool:
@@ -374,6 +353,18 @@ class DownloadHistory:
     def clear_queue_state(self):
         with self._get_connection() as conn:
             conn.cursor().execute('DELETE FROM queue_state')
+
+    def remove_queue_item_by_url(self, url: str):
+        """İndirme tamamlanınca kuyruktan sil."""
+        with self._get_connection() as conn:
+            conn.cursor().execute('DELETE FROM queue_state WHERE url = ?', (url,))
+
+    def get_all_downloaded_urls(self) -> set:
+        """Tamamlanan indirmelerin URL setini döndür — abonelik delta sync için."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT url FROM downloads WHERE status = 'completed'")
+            return {row[0] for row in cursor.fetchall()}
 
     def remove_queue_item(self, item_id: int):
         with self._get_connection() as conn:

@@ -205,12 +205,34 @@ class MainWindow(FluentWindow):
         QShortcut(QKeySequence("Escape"), self).activated.connect(lambda: self.switchTo(self.home_interface))
         QShortcut(QKeySequence("Ctrl+Q"), self).activated.connect(self.quit_app)
 
-    def _handle_retry(self, url: str):
-        """Geçmişten gelen retry isteğini ana sayfaya yönlendir"""
-        if url and hasattr(self.home_interface, 'url_input'):
-            self.home_interface.url_input.setText(url)
-            self.switchTo(self.home_interface)
-            InfoBar.info(title='Tekrar İndir', content='URL ana sayfaya yüklendi.', duration=3000, parent=self)
+    def _handle_retry(self, row: dict):
+        """Geçmişten gelen retry — format/klasör bilgisi varsa direkt başlat, yoksa ana sayfaya yükle."""
+        url = row.get('url', '') if isinstance(row, dict) else str(row)
+        if not url:
+            return
+
+        if isinstance(row, dict) and row.get('format_type') and row.get('file_path'):
+            # Yeterli bilgi var — doğrudan kuyruğa ekle
+            fp = row.get('file_path', '')
+            out_dir = os.path.dirname(fp) if fp and os.path.exists(os.path.dirname(fp)) else self.settings_interface.get_download_dir()
+            type_str = row.get('format_type', 'video')
+            format_id = row.get('format_quality') or ('bestaudio/best' if type_str == 'audio' else 'bestvideo+bestaudio/best')
+            self.start_download_process(
+                url=url, path=out_dir,
+                format_id=format_id, type_str=type_str,
+                save_meta=False,
+                video_title=row.get('title', ''),
+                channel=row.get('channel', ''),
+                thumbnail_url=row.get('thumbnail_url', ''),
+                duration=row.get('duration', 0),
+            )
+            InfoBar.info(title='Tekrar İndir', content=f"{row.get('title', url)[:60]}", duration=3000, parent=self)
+        else:
+            # Fallback — ana sayfaya URL yükle
+            if hasattr(self.home_interface, 'url_input'):
+                self.home_interface.url_input.setText(url)
+                self.switchTo(self.home_interface)
+                InfoBar.info(title='Tekrar İndir', content='URL ana sayfaya yüklendi.', duration=3000, parent=self)
 
     def _auto_organize_file(self, filepath: str, url: str) -> str:
         """Dosyayı platforma göre alt klasöre taşır. Yeni yolu döndürür."""
@@ -479,6 +501,12 @@ class MainWindow(FluentWindow):
             except Exception:
                 filename_template = None
 
+        # Kuyruk kalıcılığı — indirme başlarken kaydet
+        self.save_queue_item(
+            url=url, title=video_title or '', output_path=path,
+            format_id=format_id, type_str=type_str, thumbnail_url=thumbnail_url or ''
+        )
+
         worker = DownloadWorker(
             self.downloader, url, path, format_id, is_audio, save_meta, ratelimit,
             proxy=proxy, write_sub=write_sub, normalize_audio=normalize_audio,
@@ -571,6 +599,11 @@ class MainWindow(FluentWindow):
                               meta_title='', meta_channel='', meta_thumbnail='', meta_duration=0):
         self._active_downloads = max(0, self._active_downloads - 1)
         self._update_window_title()
+        # Kuyruktan sil (tamamlandı veya hata)
+        try:
+            get_download_history().remove_queue_item_by_url(url)
+        except Exception:
+            pass
         if self._active_downloads == 0 and hasattr(self, 'settings_interface'):
             try:
                 if self.settings_interface.get_auto_shutdown():
@@ -786,8 +819,8 @@ class MainWindow(FluentWindow):
             subs = db.get_subscriptions(active_only=True)
             if not subs:
                 return
-            # Tüm indirilen URL'leri al (hızlı lookup için set)
-            all_downloaded = {r['url'] for r in db.get_all_downloads(limit=2000)}
+            # Tüm indirilen URL'leri al — optimize: sadece url sütunu
+            all_downloaded = db.get_all_downloaded_urls()
             for sub in subs:
                 new_vids = check_channel_new_videos(sub['url'], known_urls=all_downloaded)
                 db.update_subscription_checked(sub['id'], len(new_vids))

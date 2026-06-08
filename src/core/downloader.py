@@ -470,6 +470,21 @@ class Downloader:
             for key in ('title','uploader','channel','upload_date','ext','id'):
                 atpl = atpl.replace(f'{{{key}}}', f'%({key})s')
 
+            # audio_quality '0' ise VBR (en iyi), yoksa kbps
+            _aq = audio_quality
+            if _aq == '0':
+                _aq = '0'  # VBR best
+            elif not _aq:
+                try:
+                    from src.utils import config as _cfg2
+                    _aq = _cfg2.get('audio_quality', '0')
+                except Exception:
+                    _aq = '0'
+            # Update preferred quality in postprocessors
+            for pp in postprocessors:
+                if pp.get('key') == 'FFmpegExtractAudio':
+                    pp['preferredquality'] = _aq
+
             ydl_opts = {
                 'format': 'bestaudio/best',
                 'outtmpl': os.path.join(output_path, atpl),
@@ -480,8 +495,9 @@ class Downloader:
                 'postprocessors': postprocessors,
                 'keepvideo': False,
                 'quiet': True,
-                'no_warnings': False,
+                'no_warnings': True,
                 'ignoreerrors': False,
+                'logger': _SilentLogger(),
             }
             
             if ratelimit:

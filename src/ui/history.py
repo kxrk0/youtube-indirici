@@ -41,7 +41,7 @@ class _HistoryLoader(QThread):
 class HistoryItemCard(CardWidget):
     delete_requested = pyqtSignal(int)
     open_requested = pyqtSignal(str)
-    retry_requested = pyqtSignal(str)   # emits url
+    retry_requested = pyqtSignal(dict)   # emits full row dict for smart retry
 
     def __init__(self, row: dict, parent=None):
         super().__init__(parent)
@@ -129,11 +129,12 @@ class HistoryItemCard(CardWidget):
             folder_btn.clicked.connect(self._open_folder)
             h.addWidget(folder_btn)
 
-        # Retry button for error rows
-        if status == 'error' and row.get('url'):
+        # Retry button — hata ve tamamlanan satırlar için
+        if row.get('url'):
             retry_btn = TransparentToolButton(FluentIcon.SYNC, self)
             retry_btn.setToolTip("Tekrar İndir")
-            retry_btn.clicked.connect(lambda: self.retry_requested.emit(row.get('url', '')))
+            _row_snap = dict(row)  # closure için kopyala
+            retry_btn.clicked.connect(lambda: self.retry_requested.emit(_row_snap))
             h.addWidget(retry_btn)
 
         del_btn = TransparentToolButton(FluentIcon.DELETE, self)
@@ -160,7 +161,7 @@ class HistoryItemCard(CardWidget):
 
 class HistoryInterface(SmoothScrollArea):
     """İndirme geçmişi sayfası"""
-    retry_requested = pyqtSignal(str)   # propagates card signal up to MainWindow
+    retry_requested = pyqtSignal(dict)   # propagates card signal up to MainWindow
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -295,7 +296,42 @@ class HistoryInterface(SmoothScrollArea):
         self._search_timer.start()
 
     def _do_search(self):
-        self.load_history(query=self.search_input.text().strip())
+        query = self.search_input.text().strip().lower()
+        if not self._current_rows:
+            # Hiç veri yok — DB'den yükle
+            self.load_history()
+            return
+        if not query:
+            # Filtre temizlendi — tüm satırları göster
+            self._re_render_rows(self._current_rows)
+            return
+        # In-memory filtre — DB çağrısı yok
+        filtered = [
+            r for r in self._current_rows
+            if query in (r.get('title') or '').lower()
+            or query in (r.get('channel') or '').lower()
+            or query in (r.get('url') or '').lower()
+        ]
+        self._re_render_rows(filtered)
+
+    def _re_render_rows(self, rows: list):
+        """Mevcut satır listesini temizleyip yeniden render et."""
+        while self.list_layout.count():
+            item = self.list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        if not rows:
+            empty = BodyLabel("Sonuç bulunamadı.", self.list_widget)
+            empty.setStyleSheet("color: gray;")
+            self.list_layout.addWidget(empty)
+            self._rendered_count = 0
+            return
+        # Lazy render için geçici olarak _current_rows override et
+        _saved = self._current_rows
+        self._current_rows = rows
+        self._rendered_count = 0
+        self._render_next_batch()
+        self._current_rows = _saved
 
     def load_history(self, query: str = ""):
         self._loader = _HistoryLoader(query)

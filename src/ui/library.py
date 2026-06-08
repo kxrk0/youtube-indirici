@@ -196,7 +196,8 @@ class _MediaPreviewDialog(QDialog):
         thumb.setStyleSheet("background:#1a1a1a; border-radius:6px;")
         ext = os.path.splitext(filepath)[1].lower()
         # Önce video thumbnail dene
-        cache_dir = os.path.join(os.getcwd(), 'cache', 'thumbnails')
+        from src.utils.helpers import get_app_dir as _get_app_dir
+        cache_dir = os.path.join(_get_app_dir(), 'cache', 'thumbnails')
         os.makedirs(cache_dir, exist_ok=True)
         import hashlib
         fhash = hashlib.md5(filepath.encode()).hexdigest()
@@ -543,13 +544,31 @@ class LibraryInterface(SmoothScrollArea):
         self.flow_layout.setSpacing(20)
         self.v_layout.insertLayout(1, self.flow_layout)
 
-        download_dir = get_os_download_dir()
-        exts = ('.mp4', '.mp3', '.webm', '.mkv')
+        from src.utils import config as _cfg
+        MEDIA_EXTS = ('.mp4', '.mp3', '.webm', '.mkv', '.m4a', '.flac',
+                      '.ogg', '.opus', '.avi', '.mov', '.wav', '.aac')
+        # Tüm kütüphane klasörlerini topla
+        scan_dirs = []
+        default_dir = _cfg.get('download_dir', '') or get_os_download_dir()
+        scan_dirs.append(default_dir)
+        # Ek kütüphane klasörleri (ayarlardan)
+        extra_raw = _cfg.get('library_folders', '')
+        for line in extra_raw.splitlines():
+            line = line.strip()
+            if line and os.path.isdir(line) and line not in scan_dirs:
+                scan_dirs.append(line)
+
         self._all_files = []
-        if os.path.exists(download_dir):
-            for f in os.listdir(download_dir):
-                if f.lower().endswith(exts):
-                    self._all_files.append(os.path.join(download_dir, f))
+        seen = set()
+        for scan_dir in scan_dirs:
+            if not os.path.exists(scan_dir):
+                continue
+            for f in os.listdir(scan_dir):
+                if f.lower().endswith(MEDIA_EXTS):
+                    fp = os.path.join(scan_dir, f)
+                    if fp not in seen:
+                        seen.add(fp)
+                        self._all_files.append(fp)
         self._apply_filter()
 
     def _apply_filter(self):
@@ -557,8 +576,8 @@ class LibraryInterface(SmoothScrollArea):
         type_idx = self.type_filter.currentIndex() if hasattr(self, 'type_filter') else 0
         sort_idx = self.sort_combo.currentIndex() if hasattr(self, 'sort_combo') else 0
 
-        VIDEO_EXTS = {'.mp4', '.webm', '.mkv'}
-        AUDIO_EXTS = {'.mp3'}
+        VIDEO_EXTS = {'.mp4', '.webm', '.mkv', '.avi', '.mov'}
+        AUDIO_EXTS = {'.mp3', '.m4a', '.flac', '.ogg', '.opus', '.wav', '.aac'}
 
         filtered = []
         for fp in self._all_files:

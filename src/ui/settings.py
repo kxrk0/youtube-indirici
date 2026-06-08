@@ -355,6 +355,28 @@ class SettingsInterface(SmoothScrollArea):
         self.concurrent_card.slider.valueChanged.connect(self._on_concurrent_changed)
         group2.addSettingCard(self.concurrent_card)
 
+        # Ses kalitesi seçimi
+        self.audio_quality_card = SettingCard(
+            FluentIcon.MUSIC, "Ses İndirme Kalitesi",
+            "MP3 çıktı bit hızı", parent=self.view
+        )
+        self._audio_quality_combo = ComboBox(self.audio_quality_card)
+        for label, val in [("En İyi (VBR)", "0"), ("320 kbps", "320"),
+                           ("256 kbps", "256"), ("192 kbps", "192"),
+                           ("128 kbps", "128")]:
+            self._audio_quality_combo.addItem(label, userData=val)
+        saved_aq = cfg.get('audio_quality', '0')
+        for i in range(self._audio_quality_combo.count()):
+            if self._audio_quality_combo.itemData(i) == saved_aq:
+                self._audio_quality_combo.setCurrentIndex(i)
+                break
+        self._audio_quality_combo.currentIndexChanged.connect(
+            lambda: cfg.set_value('audio_quality', self._audio_quality_combo.currentData())
+        )
+        self.audio_quality_card.hBoxLayout.addWidget(self._audio_quality_combo)
+        self.audio_quality_card.hBoxLayout.addSpacing(16)
+        group2.addSettingCard(self.audio_quality_card)
+
         self.fragment_card = SliderSettingCard(
             FluentIcon.SPEED_HIGH, "Fragment İndirme Sayısı",
             "4 eş zamanlı fragment (yavaş bağlantıda 2, hızlı bağlantıda 16)",
@@ -447,6 +469,26 @@ class SettingsInterface(SmoothScrollArea):
         self.proxy_pool_card.hBoxLayout.addSpacing(16)
         group_proxy_pool.addSettingCard(self.proxy_pool_card)
         self.v_layout.addWidget(group_proxy_pool)
+
+        # Kütüphane ek klasörleri
+        group_lib = SettingCardGroup("Kütüphane", self.view)
+        self.library_folders_card = SettingCard(
+            FluentIcon.LIBRARY, "Ek Kütüphane Klasörleri",
+            "Her satıra bir klasör yolu — kütüphane bu klasörleri de tarar", parent=self.view
+        )
+        from PyQt6.QtWidgets import QTextEdit as _QTE
+        self._lib_folders_edit = _QTE(self.library_folders_card)
+        self._lib_folders_edit.setPlaceholderText("C:\\Users\\Ben\\Müzik\nD:\\Videolar")
+        self._lib_folders_edit.setFixedHeight(70)
+        self._lib_folders_edit.setStyleSheet("background:#1a1a2e; color:#ddd; border-radius:4px;")
+        self._lib_folders_edit.setPlainText(cfg.get('library_folders', ''))
+        self._lib_folders_edit.textChanged.connect(
+            lambda: cfg.set_value('library_folders', self._lib_folders_edit.toPlainText())
+        )
+        self.library_folders_card.hBoxLayout.addWidget(self._lib_folders_edit)
+        self.library_folders_card.hBoxLayout.addSpacing(16)
+        group_lib.addSettingCard(self.library_folders_card)
+        self.v_layout.addWidget(group_lib)
 
         # Tema Tasarımcısı
         group_theme = SettingCardGroup("Tema Tasarımcısı", self.view)
@@ -578,6 +620,13 @@ class SettingsInterface(SmoothScrollArea):
 
     def get_concurrent_limit(self) -> int:
         return self.concurrent_card.slider.value()
+
+    def get_audio_quality(self) -> str:
+        """MP3 bit hızı — '0' (VBR best), '320', '256', '192', '128'."""
+        try:
+            return self._audio_quality_combo.currentData() or '0'
+        except Exception:
+            return cfg.get('audio_quality', '0')
 
     def get_filename_template(self) -> str:
         tpl = self.filename_tpl_card.line_edit.text().strip()

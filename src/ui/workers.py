@@ -8,7 +8,7 @@ from typing import Optional
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from src.utils.helpers import extract_video_thumbnail, get_ffmpeg_path, detect_platform
+from src.utils.helpers import extract_video_thumbnail, get_ffmpeg_path, detect_platform, get_app_dir
 
 
 def _extract_audio_cover(audio_path: str, out_jpg: str) -> bool:
@@ -66,7 +66,7 @@ class ThumbnailWorker(QThread):
         self.is_running = True
 
     def run(self):
-        cache_dir = os.path.join(os.getcwd(), 'cache', 'thumbnails')
+        cache_dir = os.path.join(get_app_dir(), 'cache', 'thumbnails')
         os.makedirs(cache_dir, exist_ok=True)
 
         while self.is_running:
