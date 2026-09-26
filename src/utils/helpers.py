@@ -15,59 +15,6 @@ try:
 except ImportError:
     HAS_MUTAGEN = False
 
-# Cached monitor info
-_cached_refresh_rate: Optional[float] = None
-
-def get_monitor_refresh_rate() -> float:
-    """
-    Monitörün refresh rate'ini algılar ve cache'ler.
-    180Hz, 144Hz, 120Hz, 60Hz vb. monitörleri destekler.
-    
-    Returns:
-        float: Refresh rate (Hz cinsinden), varsayılan 60.0
-    """
-    global _cached_refresh_rate
-    
-    if _cached_refresh_rate is not None:
-        return _cached_refresh_rate
-    
-    try:
-        from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance()
-        if app:
-            screen = app.primaryScreen()
-            if screen:
-                rate = screen.refreshRate()
-                if rate > 0:
-                    _cached_refresh_rate = rate
-                    return rate
-    except Exception:
-        pass
-    
-    _cached_refresh_rate = 60.0
-    return _cached_refresh_rate
-
-def get_optimal_timer_interval() -> int:
-    """
-    Monitör refresh rate'ine göre optimal timer interval hesaplar.
-    
-    Returns:
-        int: Millisaniye cinsinden interval (min 1ms)
-    """
-    rate = get_monitor_refresh_rate()
-    return max(1, int(1000 / rate))
-
-def get_animation_speed_factor() -> float:
-    """
-    Animasyon hızı için normalize edilmiş faktör.
-    60Hz baz alınarak hesaplanır.
-    
-    Returns:
-        float: 60Hz için 1.0, 180Hz için ~0.33
-    """
-    rate = get_monitor_refresh_rate()
-    return 60.0 / rate
-
 def get_app_dir() -> str:
     """EXE veya script dizinini döndürür (config/db için)"""
     import sys

@@ -1,19 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
 import os
-from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
-# qfluentwidgets kaynaklarını önceden topla — Analysis'e INPUT olarak ver
-qfw_datas, qfw_binaries, qfw_hiddenimports = collect_all('qfluentwidgets')
+# Arayüz derlemesi (cd webui && npm run build) EXE'ye gömülür; yoksa derleme anlamsız.
+if not os.path.isfile(os.path.join('webui', 'dist', 'index.html')):
+    raise SystemExit("webui/dist yok: önce 'cd webui && npm install && npm run build' çalıştır.")
 
 datas = [
     ('locales', 'locales'),
     ('extension/icons', 'extension/icons'),
     ('native_host', 'native_host'),
     ('cache', 'cache'),
-] + qfw_datas
+    ('webui/dist', 'webui/dist'),
+    ('assets', 'assets'),
+]
 
 # FFmpeg ikili dosyalarını EXE yanına ekle
 import glob as _glob
@@ -27,17 +29,16 @@ if _ffmpeg_src:
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=qfw_binaries,
+    binaries=[],
     datas=datas,
     hiddenimports=[
-        'PyQt6.QtCore',
-        'PyQt6.QtGui',
-        'PyQt6.QtWidgets',
-        'PyQt6.QtNetwork',
-        'qfluentwidgets',
+        'webview',
+        'webview.platforms.winforms',
+        'webview.platforms.edgechromium',
+        'clr',
+        # pystray arka ucu çalışma anında seçiliyor, PyInstaller kendisi göremiyor.
+        'pystray._win32',
         'yt_dlp',
-        'flask',
-        'flask_cors',
         'mutagen',
         'mutagen.mp3',
         'mutagen.id3',
@@ -48,13 +49,16 @@ a = Analysis(
         'src.core.profiles',
         'src.core.plugin_manager',
         'src.core.subscription_manager',
-        'src.ui.mini_window',
-        'src.ui.notification_center',
+        'src.web.app',
+        'src.web.api',
+        'src.web.tray',
         'native_host.native_host',
-    ] + qfw_hiddenimports,
+    ],
     hookspath=[],
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'numpy'],
+    # Whisper (torch + llvmlite ~480 MB) EXE'ye girmez; döküm, kurulu Python'la çalışırken kullanılabilir.
+    # numpy zaten dışarıda olduğu için gömülse de çalışmazdı.
+    excludes=['tkinter', 'matplotlib', 'numpy', 'whisper', 'torch', 'llvmlite', 'numba', 'tiktoken'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -78,7 +82,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='extension/icons/app.ico' if os.path.exists('extension/icons/app.ico') else None,
+    icon='assets/app.ico',
 )
 
 coll = COLLECT(

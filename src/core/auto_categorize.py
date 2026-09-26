@@ -29,7 +29,7 @@ _DEFAULT_RULES: list[dict] = [
         'match_field': 'title',
         'pattern': r'music|müzik|remix|lyric|official audio|nightcore|lofi|lo-fi',
         'output_subdir': 'Müzik',
-        'type_override': 'audio',
+        'type_override': '',
     },
     {
         'name': 'Podcast',
@@ -43,7 +43,7 @@ _DEFAULT_RULES: list[dict] = [
         'match_field': 'url',
         'pattern': r'shorts|tiktok\.com|instagram\.com/reels',
         'output_subdir': 'Kısa Videolar',
-        'type_override': 'video',
+        'type_override': '',
     },
     {
         'name': 'Eğitim',

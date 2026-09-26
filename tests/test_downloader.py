@@ -50,7 +50,9 @@ from src.utils.helpers import (
     ("https://twitter.com/user/status/1", True),
     ("https://x.com/user/status/1", True),
     ("https://www.dailymotion.com/video/x7tgd0", True),
-    ("https://www.reddit.com/r/videos/", False),
+    # reddit desteklenen platformlara eklendiğinde bu satır güncellenmemişti.
+    ("https://www.reddit.com/r/videos/", True),
+    ("https://example.com/video.mp4", False),
     ("not_a_url", False),
     ("", False),
     ("   ", False),

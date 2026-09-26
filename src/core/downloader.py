@@ -16,7 +16,10 @@ from typing import Dict, List, Optional, Callable
 
 import yt_dlp
 from src.utils.helpers import get_os_download_dir, get_ffmpeg_path, embed_metadata
-from src.core.database import get_download_history
+from src.core.ytdlp_base import (
+    base_opts, recovery_opts, purge_player_cache, explain_error, is_recoverable_error,
+    ForceH264PP, EDIT_FORMAT_SPEC, ProcessCancelled,
+)
 
 
 class _SilentLogger:
@@ -81,7 +84,7 @@ class Downloader:
         """Video hakkında bilgi alır"""
         try:
             print(f"Video bilgisi alınıyor: {url}")
-            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'logger': _SilentLogger()}) as ydl:
+            with yt_dlp.YoutubeDL(base_opts(logger=_SilentLogger())) as ydl:
                 info = ydl.extract_info(url, download=False)
                 if info:
                     print(f"Video başlığı: {info.get('title')}")
@@ -100,12 +103,7 @@ class Downloader:
     def get_playlist_info(self, url: str) -> Optional[Dict]:
         """Playlist videolarını hızlıca listeler (flat)"""
         try:
-            opts = {
-                'extract_flat': True,
-                'quiet': True,
-                'no_warnings': True,
-                'logger': _SilentLogger(),
-            }
+            opts = base_opts(extract_flat=True, logger=_SilentLogger())
             with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(url, download=False)
         except Exception as e:
@@ -219,29 +217,87 @@ class Downloader:
                 task.status = DOWNLOAD_STATUS_PROCESSING
                 if progress_callback:
                     progress_callback({'status': 'processing', 'filename': task.filename})
-        
+
+        def _final_file_hook(filepath: str):
+            # progress_hooks'un son 'finished' dosyası birleştirmeden önce
+            # silinen parça (".f251.webm"); gerçek çıktı yolu yalnızca
+            # post-process zinciri (H.264 dönüştürme dahil) bittikten sonra belli.
+            task.filename = filepath
+            if progress_callback:
+                progress_callback({'status': 'finished', 'filename': filepath})
+
+        def _convert_cancelled() -> bool:
+            return bool(task.is_cancelled() or (cancel_callback and cancel_callback()))
+
+        def _convert_progress(percent: int):
+            # 4K dönüştürme bir dakikadan uzun sürüyor; bildirim olmadan
+            # kuyruk kartı son indirme satırında donmuş görünüyordu.
+            task.progress = percent
+            task.status = DOWNLOAD_STATUS_PROCESSING
+            if progress_callback:
+                progress_callback({
+                    'status': 'converting',
+                    'progress': percent,
+                    'filename': task.filename,
+                })
+
+
         def _download_with_retry():
             self.is_downloading = True
             task.status = DOWNLOAD_STATUS_DOWNLOADING
             
-            format_spec = format_id
+            native_webm = format_id == 'webm'
+            # edit_h264      : sadece avc1 akışı seç (hızlı, YouTube'da 1080p tavanı)
+            # edit_h264_max  : en yüksek çözünürlüğü indir, sonra H.264'e çevir (yavaş)
+            #
+            # İkisinde de dönüştürücü devrede: zaten H.264 ise atlıyor, ama
+            # avc1 akışı olmayan videoda edit_h264'ün "AE uyumlu" vaadini
+            # boşa düşmekten kurtarıyor.
+            force_h264 = format_id in ('edit_h264', 'edit_h264_max')
+
             if format_id == 'best':
                 format_spec = 'bestvideo+bestaudio/best'
+            elif native_webm:
+                format_spec = 'bestvideo[ext=webm]+bestaudio[ext=webm]/best'
+            elif format_id == 'edit_h264':
+                format_spec = EDIT_FORMAT_SPEC
+            elif format_id == 'edit_h264_max':
+                format_spec = 'bestvideo+bestaudio/best'
+            else:
+                format_spec = format_id
             
             tpl = filename_template or '%(title)s.%(ext)s'
             # Convert user-friendly {title} → %(title)s placeholders
             for key in ('title','uploader','channel','upload_date','resolution','ext','id'):
                 tpl = tpl.replace(f'{{{key}}}', f'%({key})s')
 
-            ydl_opts = {
-                'format': format_spec,
-                'outtmpl': os.path.join(output_path, tpl),
-                'writethumbnail': True,
-                'concurrent_fragment_downloads': self._get_fragment_count(),
-                'http_chunk_size': 10485760,
-                'writeinfojson': save_info,
-                'merge_output_format': 'mp4',
-                'postprocessors': [{
+            ydl_opts = base_opts(
+                format=format_spec,
+                outtmpl=os.path.join(output_path, tpl),
+                writethumbnail=not native_webm,
+                concurrent_fragment_downloads=self._get_fragment_count(),
+                http_chunk_size=10485760,
+                writeinfojson=save_info,
+                keepvideo=False,
+                verbose=False,
+                logger=_SilentLogger(),
+                ignoreerrors=False,
+                retries=3,  # yt-dlp internal retry
+                fragment_retries=5,  # Fragment retry
+                progress_hooks=[_progress_hook],
+                post_hooks=[_final_file_hook],
+            )
+
+            if native_webm:
+                # Saf codec: VP8/VP9/AV1 + Opus olduğu gibi kalır; konteyner/encode zorlaması yok.
+                # Edit programına ham kodek gitmesi istenen mod (webm plugin'i olan programlar).
+                ydl_opts['postprocessors'] = [{
+                    'key': 'FFmpegMetadata',
+                    'add_metadata': True,
+                }]
+            else:
+                ydl_opts['merge_output_format'] = 'mp4'
+                ydl_opts['postprocessors'] = [{
                     'key': 'FFmpegVideoConvertor',
                     'preferedformat': 'mp4',
                 }, {
@@ -250,21 +306,10 @@ class Downloader:
                 }, {
                     'key': 'FFmpegMetadata',
                     'add_metadata': True,
-                }],
-                'postprocessor_args': {
+                }]
+                ydl_opts['postprocessor_args'] = {
                     'merger': ['-c:a', 'aac', '-b:a', '192k'],
-                },
-                'keepvideo': False,
-                'verbose': False,
-                'quiet': True,
-                'no_warnings': True,
-                'logger': _SilentLogger(),
-                'ignoreerrors': False,
-                'socket_timeout': 30,  # Ağ timeout
-                'retries': 3,  # yt-dlp internal retry
-                'fragment_retries': 5,  # Fragment retry
-                'progress_hooks': [_progress_hook],
-            }
+                }
             
             if write_sub:
                 ydl_opts['writesubtitles'] = True
@@ -313,46 +358,63 @@ class Downloader:
             while task.retry_count < task.max_retries:
                 if task.is_cancelled():
                     task.status = DOWNLOAD_STATUS_CANCELLED
-                    # İptal'i geçmişe kaydet
-                    self._save_to_history(url, task, 'cancelled', format_id, 'video')
                     if complete_callback:
                         complete_callback(False, "İndirme iptal edildi")
                     break
                     
                 try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    attempt_opts = dict(ydl_opts, **recovery_opts(task.retry_count))
+                    with yt_dlp.YoutubeDL(attempt_opts) as ydl:
+                        if force_h264:
+                            # Diğer postprocessor'lar bittikten sonra çalışsın:
+                            # metadata/thumbnail gömme dönüştürmeden önce olmalı.
+                            ydl.add_post_processor(
+                                ForceH264PP(
+                                    ydl,
+                                    on_progress=_convert_progress,
+                                    should_cancel=_convert_cancelled,
+                                ),
+                                when='post_process',
+                            )
                         ydl.download([url])
-                    
+
                     task.status = DOWNLOAD_STATUS_COMPLETED
-                    # Başarılı indirmeyi geçmişe kaydet
-                    self._save_to_history(url, task, 'completed', format_id, 'video')
                     if complete_callback:
                         complete_callback(True)
                     break
                     
                 except Exception as e:
                     last_error = str(e)
-                    
-                    # İptal durumunda retry yapma
-                    if "iptal" in last_error.lower() or task.is_cancelled():
+
+                    # İptal durumunda retry yapma. ProcessCancelled ayrıca tip
+                    # üzerinden yakalanıyor: metin eşleşmesine güvenmek, hata
+                    # mesajı değişince sessizce yeniden indirmeye yol açıyor.
+                    if (isinstance(e, ProcessCancelled)
+                            or "iptal" in last_error.lower() or task.is_cancelled()):
                         task.status = DOWNLOAD_STATUS_CANCELLED
-                        self._save_to_history(url, task, 'cancelled', format_id, 'video')
                         if complete_callback:
                             complete_callback(False, "İndirme iptal edildi")
                         break
                     
                     task.retry_count += 1
                     print(f"İndirme hatası (deneme {task.retry_count}/{task.max_retries}): {last_error}")
-                    
-                    if task.retry_count < task.max_retries:
+
+                    # Özel video / kaldırılmış video gibi kalıcı hatalarda
+                    # tekrar denemek sadece kullanıcıyı bekletir.
+                    retryable = is_recoverable_error(last_error)
+
+                    if retryable and task.retry_count < task.max_retries:
+                        # 403 aynı isteği tekrarlamakla geçmez: bayat player JS /
+                        # nsig cache'ini at, sonraki denemede istemci rotasyonu devreye girer.
+                        purge_player_cache()
                         time.sleep(2)  # Retry öncesi bekle
                     else:
+                        friendly = explain_error(last_error)
                         task.status = DOWNLOAD_STATUS_ERROR
-                        task.error = last_error
-                        # Başarısız indirmeyi geçmişe kaydet
-                        self._save_to_history(url, task, 'error', format_id, 'video', last_error)
+                        task.error = friendly
                         if complete_callback:
-                            complete_callback(False, last_error)
+                            complete_callback(False, friendly)
+                        break
             
             self.is_downloading = False
             if task.task_id in self.active_tasks:
@@ -365,30 +427,6 @@ class Downloader:
         self.current_task = task
         return task
 
-    def _save_to_history(self, url: str, task, status: str, format_quality: str,
-                        format_type: str, error_message: str = None):
-        """İndirmeyi geçmişe kaydet"""
-        try:
-            history = get_download_history()
-            
-            # Dosya boyutunu al
-            file_size = None
-            if task.filename and os.path.exists(task.filename):
-                file_size = os.path.getsize(task.filename)
-                
-            history.add_download(
-                url=url,
-                title=os.path.basename(task.filename) if task.filename else None,
-                format_type=format_type,
-                format_quality=format_quality,
-                file_path=task.filename,
-                file_size=file_size,
-                status=status,
-                error_message=error_message
-            )
-        except Exception as e:
-            print(f"Geçmişe kaydetme hatası: {e}")
-            
     def _parse_time(self, time_str: str) -> float:
         """
         Zaman string'ini saniyeye çevir
@@ -485,20 +523,18 @@ class Downloader:
                 if pp.get('key') == 'FFmpegExtractAudio':
                     pp['preferredquality'] = _aq
 
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(output_path, atpl),
-                'writethumbnail': True,
-                'concurrent_fragment_downloads': self._get_fragment_count(),
-                'http_chunk_size': 10485760,
-                'writeinfojson': save_info,
-                'postprocessors': postprocessors,
-                'keepvideo': False,
-                'quiet': True,
-                'no_warnings': True,
-                'ignoreerrors': False,
-                'logger': _SilentLogger(),
-            }
+            ydl_opts = base_opts(
+                format='bestaudio/best',
+                outtmpl=os.path.join(output_path, atpl),
+                writethumbnail=True,
+                concurrent_fragment_downloads=self._get_fragment_count(),
+                http_chunk_size=10485760,
+                writeinfojson=save_info,
+                postprocessors=postprocessors,
+                keepvideo=False,
+                ignoreerrors=False,
+                logger=_SilentLogger(),
+            )
             
             if ratelimit:
                 ydl_opts['ratelimit'] = ratelimit
@@ -520,24 +556,40 @@ class Downloader:
             if progress_callback:
                 ydl_opts['progress_hooks'] = [progress_callback]
                 
+            # Ses indirme de video tarafıyla aynı 403 riskini taşıyor;
+            # tek denemede bırakmak yerine kurtarma stratejisini uygula.
+            max_attempts = 3
+            last_error = None
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    filename = ydl.prepare_filename(info)
-                    final_filename = os.path.splitext(filename)[0] + ".mp3"
+                for attempt in range(max_attempts):
+                    try:
+                        attempt_opts = dict(ydl_opts, **recovery_opts(attempt))
+                        with yt_dlp.YoutubeDL(attempt_opts) as ydl:
+                            info = ydl.extract_info(url, download=True)
+                            filename = ydl.prepare_filename(info)
+                            final_filename = os.path.splitext(filename)[0] + ".mp3"
 
-                    # Doğru nihai dosya yolunu DownloadWorker'a bildir
-                    if progress_callback:
-                        progress_callback({'status': 'finished', 'filename': final_filename})
+                            # Doğru nihai dosya yolunu DownloadWorker'a bildir
+                            if progress_callback:
+                                progress_callback({'status': 'finished', 'filename': final_filename})
 
-                    embed_metadata(final_filename, info)
+                            embed_metadata(final_filename, info)
 
-                if complete_callback:
-                    complete_callback(True)
-            except Exception as e:
-                print(f"Ses indirme hatası: {str(e)}")
-                if complete_callback:
-                    complete_callback(False, str(e))
+                        if complete_callback:
+                            complete_callback(True)
+                        break
+                    except Exception as e:
+                        last_error = str(e)
+                        print(f"Ses indirme hatası (deneme {attempt + 1}/{max_attempts}): {last_error}")
+
+                        if not is_recoverable_error(last_error) or attempt == max_attempts - 1:
+                            friendly = explain_error(last_error)
+                            if complete_callback:
+                                complete_callback(False, friendly)
+                            break
+
+                        purge_player_cache()
+                        time.sleep(2)
             finally:
                 self.is_downloading = False
                 
@@ -604,20 +656,18 @@ class Downloader:
             self.is_downloading = True
             task.status = DOWNLOAD_STATUS_DOWNLOADING
 
-            ydl_opts = {
-                'format': 'bestvideo+bestaudio/best',
-                'outtmpl': os.path.join(output_path, '%(title)s.%(ext)s'),
-                'merge_output_format': 'mp4',
-                'live_from_start': True,
-                'wait_for_video': (0, 120),
-                'concurrent_fragment_downloads': 4,
-                'socket_timeout': 30,
-                'retries': 10,
-                'fragment_retries': 10,
-                'quiet': True,
-                'no_warnings': False,
-                'progress_hooks': [_progress_hook],
-            }
+            ydl_opts = base_opts(
+                format='bestvideo+bestaudio/best',
+                outtmpl=os.path.join(output_path, '%(title)s.%(ext)s'),
+                merge_output_format='mp4',
+                live_from_start=True,
+                wait_for_video=(0, 120),
+                concurrent_fragment_downloads=4,
+                retries=10,
+                fragment_retries=10,
+                no_warnings=False,
+                progress_hooks=[_progress_hook],
+            )
 
             if proxy:
                 ydl_opts['proxy'] = proxy
@@ -630,22 +680,20 @@ class Downloader:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
                 task.status = DOWNLOAD_STATUS_COMPLETED
-                self._save_to_history(url, task, 'completed', 'live', 'video')
                 if complete_callback:
                     complete_callback(True)
             except Exception as e:
                 err = str(e)
                 if 'iptal' in err.lower() or task.is_cancelled():
                     task.status = DOWNLOAD_STATUS_CANCELLED
-                    self._save_to_history(url, task, 'cancelled', 'live', 'video')
                     if complete_callback:
                         complete_callback(False, "Kayıt iptal edildi")
                 else:
+                    friendly = explain_error(err)
                     task.status = DOWNLOAD_STATUS_ERROR
-                    task.error = err
-                    self._save_to_history(url, task, 'error', 'live', 'video', err)
+                    task.error = friendly
                     if complete_callback:
-                        complete_callback(False, err)
+                        complete_callback(False, friendly)
             finally:
                 self.is_downloading = False
                 if task.task_id in self.active_tasks:

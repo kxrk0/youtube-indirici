@@ -199,19 +199,18 @@ def download_track(spotify_url: str,
     except Exception:
         ffmpeg_dir = None
 
-    ydl_opts: dict = {
-        'format':         'bestaudio/best',
-        'outtmpl':        out_template,
-        'quiet':          True,
-        'no_warnings':    True,
-        'progress_hooks': [_progress_hook],
-        'postprocessors': [{
+    from src.core.ytdlp_base import base_opts
+    ydl_opts: dict = base_opts(
+        format='bestaudio/best',
+        outtmpl=out_template,
+        progress_hooks=[_progress_hook],
+        postprocessors=[{
             'key':               'FFmpegExtractAudio',
             'preferredcodec':    'mp3',
             'preferredquality':  '320',
         }],
-        'noplaylist': True,
-    }
+        noplaylist=True,
+    )
     if ffmpeg_dir:
         ydl_opts['ffmpeg_location'] = ffmpeg_dir
 

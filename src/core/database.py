@@ -327,6 +327,10 @@ class DownloadHistory:
                 last_new_count = ? WHERE id = ?
             ''', (new_count, sub_id))
 
+    def rename_subscription(self, url: str, name: str):
+        with self._get_connection() as conn:
+            conn.cursor().execute('UPDATE subscriptions SET name = ? WHERE url = ?', (name, url))
+
     def delete_subscription(self, sub_id: int):
         with self._get_connection() as conn:
             conn.cursor().execute('DELETE FROM subscriptions WHERE id = ?', (sub_id,))

@@ -1,0 +1,293 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { ChevronDown, Music, MoreHorizontal, RefreshCw, Search, Video } from 'lucide-react'
+import { api, onBridgeEvent, type LibraryFile, type Tags } from '../bridge'
+import * as fmt from '../ortam/format'
+import { useStore } from '../store'
+import { Popover, SPRING_SEGMENT } from '../components/Controls'
+import { ConfirmSheet, Sheet } from '../components/Sheets'
+
+const CONVERT_FORMATS = ['mp3', 'mp4', 'mkv', 'webm', 'wav', 'aac'] as const
+const TAGGABLE = new Set(['mp3', 'mp4', 'm4a'])
+const WHISPER_MODELS = ['tiny', 'base', 'small', 'medium', 'large'] as const
+const SORTS = [
+  { id: 'new', label: 'En yeni' },
+  { id: 'old', label: 'En eski' },
+  { id: 'az', label: 'Ad (A–Z)' },
+  { id: 'za', label: 'Ad (Z–A)' },
+  { id: 'big', label: 'En büyük' },
+] as const
+type SortId = (typeof SORTS)[number]['id']
+type Kind = 'all' | 'video' | 'audio'
+
+/** Oturum boyunca kapak önbelleği: sayfa her açıldığında Python'a tekrar sorulmasın. */
+const thumbCache = new Map<string, string | null>()
+
+function Thumb({ file }: { file: LibraryFile }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [src, setSrc] = useState<string | null | undefined>(thumbCache.get(file.path))
+  useEffect(() => {
+    if (src !== undefined || !ref.current) return
+    // Görünür olunca iste: yüzlerce dosyada ffmpeg'i hepsi için aynı anda çalıştırmayalım.
+    const io = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return
+      io.disconnect()
+      api().library_thumbnail(file.path).then((d) => { thumbCache.set(file.path, d); setSrc(d) })
+        .catch((err) => { console.error('Kapak alınamadı', file.name, err); thumbCache.set(file.path, null); setSrc(null) })
+    }, { rootMargin: '200px' })
+    io.observe(ref.current)
+    return () => io.disconnect()
+  }, [file.path, file.name, src])
+  const Icon = file.kind === 'audio' ? Music : Video
+  return (
+    <div ref={ref} className="am-lib-thumb">
+      {src ? <motion.img src={src} alt="" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }} />
+        : <Icon size={26} strokeWidth={1.4} />}
+    </div>
+  )
+}
+
+export function Library() {
+  const store = useStore()
+  const [files, setFiles] = useState<LibraryFile[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [kind, setKind] = useState<Kind>('all')
+  const [sort, setSort] = useState<SortId>('new')
+  const [sortOpen, setSortOpen] = useState(false)
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [convertFor, setConvertFor] = useState<string | null>(null)
+  const [tagsFor, setTagsFor] = useState<string | null>(null)
+  const [transcribeFor, setTranscribeFor] = useState<string | null>(null)
+  const [deleteFor, setDeleteFor] = useState<LibraryFile | null>(null)
+
+  const load = useCallback(() => {
+    api().library().then((r) => { setFiles(r.files); setLoadError(null) }).catch((err) => setLoadError(String(err?.message ?? err)))
+  }, [])
+  useEffect(load, [load])
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLocaleLowerCase('tr-TR')
+    const list = (files ?? []).filter((f) => (kind === 'all' || f.kind === kind) && (!q || f.name.toLocaleLowerCase('tr-TR').includes(q)))
+    const by: Record<SortId, (a: LibraryFile, b: LibraryFile) => number> = {
+      new: (a, b) => b.mtime - a.mtime,
+      old: (a, b) => a.mtime - b.mtime,
+      az: (a, b) => a.name.localeCompare(b.name, 'tr'),
+      za: (a, b) => b.name.localeCompare(a.name, 'tr'),
+      big: (a, b) => b.size - a.size,
+    }
+    return list.sort(by[sort])
+  }, [files, query, kind, sort])
+
+  const pickAndConvert = () => api().pick_media_file().then((p) => p && setConvertFor(p))
+
+  return (
+    <div className="am-page-pad">
+      <div className="am-page-head">
+        <h1 className="am-page-title">Kütüphane</h1>
+        <div className="am-page-actions">
+          <button className="am-text-btn" onClick={pickAndConvert}>Başka bir dosyayı dönüştür</button>
+          <button className="am-text-btn" onClick={load}><RefreshCw size={14} strokeWidth={1.8} /> Yenile</button>
+        </div>
+      </div>
+
+      <div className="am-lib-filters">
+        <div className="am-url am-search" style={{ marginBottom: 0 }}>
+          <Search size={16} strokeWidth={1.8} style={{ color: 'var(--text-2)', flex: 'none' }} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Dosya adı ara" aria-label="Kütüphanede ara" />
+        </div>
+        <div className="am-seg" role="radiogroup" aria-label="Tür" style={{ marginBottom: 0 }}>
+          {(['all', 'video', 'audio'] as const).map((k) => (
+            <button key={k} role="radio" aria-checked={kind === k} onClick={() => setKind(k)}>
+              {kind === k && <motion.span layoutId="am-lib-kind" className="am-seg-ind" transition={SPRING_SEGMENT} />}
+              <span className="am-seg-text">{k === 'all' ? 'Tümü' : k === 'video' ? 'Video' : 'Ses'}</span>
+            </button>
+          ))}
+        </div>
+        <div style={{ position: 'relative' }}>
+          <button className="am-text-btn" style={{ color: 'var(--text-2)' }} onClick={() => setSortOpen((v) => !v)} aria-haspopup="menu">
+            {SORTS.find((s) => s.id === sort)?.label} <ChevronDown size={13} strokeWidth={2.2} />
+          </button>
+          <Popover open={sortOpen} onClose={() => setSortOpen(false)} style={{ right: 0, top: 30 }}>
+            {SORTS.map((s) => (
+              <button key={s.id} role="menuitemradio" aria-checked={sort === s.id} onClick={() => { setSort(s.id); setSortOpen(false) }}>{s.label}</button>
+            ))}
+          </Popover>
+        </div>
+      </div>
+
+      {loadError && <p className="am-error-text">Kütüphane okunamadı: {loadError}</p>}
+      {files && shown.length === 0 && (
+        <p className="am-empty-note">{files.length ? 'Bu filtreyle eşleşen dosya yok.' : 'Kütüphane klasörlerinde henüz medya dosyası yok.'}</p>
+      )}
+
+      <ul className="am-lib-grid">
+        {shown.map((f) => (
+          <li key={f.path} className="am-lib-card">
+            <button className="am-lib-open" onClick={() => api().open_file(f.path)} title={`${f.name} dosyasını aç`}>
+              <Thumb file={f} />
+              <strong>{f.name.replace(/\.[^.]+$/, '')}</strong>
+              <span>{f.ext.toUpperCase()}, {fmt.size(f.size)}</span>
+            </button>
+            <button className="am-icon-btn am-lib-more" aria-label="Eylemler" aria-haspopup="menu" aria-expanded={menuFor === f.path} onClick={() => setMenuFor((m) => (m === f.path ? null : f.path))}>
+              <MoreHorizontal size={16} strokeWidth={1.8} />
+            </button>
+            <Popover open={menuFor === f.path} onClose={() => setMenuFor(null)} style={{ right: 6, top: 40 }}>
+              <button onClick={() => { api().reveal(f.path); setMenuFor(null) }}>Klasörde göster</button>
+              <button onClick={() => { setConvertFor(f.path); setMenuFor(null) }}>Dönüştür</button>
+              {TAGGABLE.has(f.ext) && <button onClick={() => { setTagsFor(f.path); setMenuFor(null) }}>Etiketleri düzenle</button>}
+              <button onClick={() => { setTranscribeFor(f.path); setMenuFor(null) }}>Metne çevir (Whisper)</button>
+              <button onClick={() => { setDeleteFor(f); setMenuFor(null) }}>Sil</button>
+            </Popover>
+          </li>
+        ))}
+      </ul>
+
+      <AnimatePresence>
+        {convertFor && <ConvertSheet path={convertFor} onClose={() => setConvertFor(null)} onDone={(out) => { store.notify(`Dönüştürüldü: ${out}`); load() }} />}
+        {tagsFor && <TagsSheet path={tagsFor} onClose={() => setTagsFor(null)} onSaved={() => store.notify('Etiketler kaydedildi.')} />}
+        {transcribeFor && <TranscribeSheet path={transcribeFor} onClose={() => setTranscribeFor(null)} />}
+        {deleteFor && (
+          <ConfirmSheet title="Dosya silinsin mi?" body={`${deleteFor.name} diskten kalıcı olarak silinir. Geri dönüşüm kutusuna gitmez.`}
+            confirmLabel="Kalıcı olarak sil" onClose={() => setDeleteFor(null)}
+            onConfirm={() => api().delete_file(deleteFor.path).then(() => {
+              setFiles((fs) => fs && fs.filter((x) => x.path !== deleteFor.path))
+              store.notify(`${deleteFor.name} silindi.`)
+              setDeleteFor(null)
+            }).catch((err) => store.notify(`Silinemedi: ${err?.message ?? err}`, 'error'))} />
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function baseName(path: string) {
+  return path.split(/[\\/]/).pop() ?? path
+}
+
+function ConvertSheet({ path, onClose, onDone }: { path: string; onClose: () => void; onDone: (out: string) => void }) {
+  const current = path.split('.').pop()?.toLowerCase()
+  const [target, setTarget] = useState<string>(CONVERT_FORMATS.find((f) => f !== current) ?? 'mp3')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const run = () => {
+    setBusy(true)
+    setError(null)
+    api().convert(path, target).then((out) => { onDone(out); onClose() })
+      .catch((err) => { setError(String(err?.message ?? err)); setBusy(false) })
+  }
+  return (
+    <Sheet onClose={busy ? () => undefined : onClose}>
+      <div>
+        <h2>Dönüştür</h2>
+        <p>{baseName(path)}. Yeni dosya aynı klasöre "_converted" ekiyle yazılır; asıl dosyaya dokunulmaz.</p>
+      </div>
+      <div>
+        <div className="am-seg" role="radiogroup" aria-label="Hedef format">
+          {CONVERT_FORMATS.map((f) => (
+            <button key={f} role="radio" aria-checked={target === f} disabled={busy || f === current} onClick={() => setTarget(f)}>
+              {target === f && <motion.span layoutId="am-convert-ind" className="am-seg-ind" transition={SPRING_SEGMENT} />}
+              <span className="am-seg-text">{f.toUpperCase()}</span>
+            </button>
+          ))}
+        </div>
+        {error && <p className="am-error-text" style={{ fontSize: 12.5, userSelect: 'text' }}>{error}</p>}
+      </div>
+      <div className="am-sheet-foot">
+        <span className="am-grow">{busy ? 'Dönüştürülüyor. Büyük dosyalarda birkaç dakika sürebilir.' : ''}</span>
+        <button className="am-ghost" onClick={onClose} disabled={busy}>Vazgeç</button>
+        <button className="am-primary" onClick={run} disabled={busy}>{busy ? 'Dönüştürülüyor' : `${target.toUpperCase()} yap`}</button>
+      </div>
+    </Sheet>
+  )
+}
+
+const TAG_LABELS: [keyof Tags, string][] = [['title', 'Başlık'], ['artist', 'Sanatçı'], ['album', 'Albüm'], ['year', 'Yıl'], ['comment', 'Yorum']]
+
+function TagsSheet({ path, onClose, onSaved }: { path: string; onClose: () => void; onSaved: () => void }) {
+  const [tags, setTags] = useState<Tags | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { api().read_tags(path).then(setTags).catch((err) => setError(String(err?.message ?? err))) }, [path])
+  const save = () => tags && api().write_tags(path, tags).then(() => { onSaved(); onClose() }).catch((err) => setError(String(err?.message ?? err)))
+  return (
+    <Sheet onClose={onClose}>
+      <div>
+        <h2>Etiketler</h2>
+        <p>{baseName(path)}</p>
+      </div>
+      <div className="am-form">
+        {TAG_LABELS.map(([key, label]) => (
+          <label key={key}>
+            <span>{label}</span>
+            <input value={tags?.[key] ?? ''} disabled={!tags} onChange={(e) => setTags((t) => t && { ...t, [key]: e.target.value })} />
+          </label>
+        ))}
+        {error && <p className="am-error-text" style={{ fontSize: 12.5 }}>{error}</p>}
+      </div>
+      <div className="am-sheet-foot">
+        <span className="am-grow" />
+        <button className="am-ghost" onClick={onClose}>Vazgeç</button>
+        <button className="am-primary" onClick={save} disabled={!tags}>Kaydet</button>
+      </div>
+    </Sheet>
+  )
+}
+
+function TranscribeSheet({ path, onClose }: { path: string; onClose: () => void }) {
+  const [model, setModel] = useState<(typeof WHISPER_MODELS)[number]>('base')
+  const [lang, setLang] = useState<'tr' | 'en' | 'auto'>('tr')
+  const [lines, setLines] = useState<string[]>([])
+  const [result, setResult] = useState<{ text: string; file: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => onBridgeEvent((e) => { if (e.type === 'transcribe' && e.path === path) setLines((l) => [...l, e.line]) }), [path])
+  const run = () => {
+    setBusy(true)
+    setError(null)
+    setLines([])
+    setResult(null)
+    api().transcribe(path, model, lang === 'auto' ? null : lang).then(setResult)
+      .catch((err) => setError(String(err?.message ?? err))).finally(() => setBusy(false))
+  }
+  return (
+    <Sheet onClose={busy ? () => undefined : onClose}>
+      <div>
+        <h2>Metne çevir</h2>
+        <p>{baseName(path)}. Metin dosyanın yanına .txt olarak kaydedilir. Büyük modeller daha doğru ama daha yavaş.</p>
+      </div>
+      <div style={{ display: 'grid', gap: 12, minHeight: 0 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className="am-seg" role="radiogroup" aria-label="Model" style={{ marginBottom: 0 }}>
+            {WHISPER_MODELS.map((m) => (
+              <button key={m} role="radio" aria-checked={model === m} disabled={busy} onClick={() => setModel(m)}>
+                {model === m && <motion.span layoutId="am-whisper-model" className="am-seg-ind" transition={SPRING_SEGMENT} />}
+                <span className="am-seg-text">{m}</span>
+              </button>
+            ))}
+          </div>
+          <div className="am-seg" role="radiogroup" aria-label="Dil" style={{ marginBottom: 0 }}>
+            {(['tr', 'en', 'auto'] as const).map((l) => (
+              <button key={l} role="radio" aria-checked={lang === l} disabled={busy} onClick={() => setLang(l)}>
+                {lang === l && <motion.span layoutId="am-whisper-lang" className="am-seg-ind" transition={SPRING_SEGMENT} />}
+                <span className="am-seg-text">{l === 'tr' ? 'Türkçe' : l === 'en' ? 'İngilizce' : 'Otomatik'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {(lines.length > 0 || error) && (
+          <div className="am-log" aria-live="polite">
+            {lines.map((l, i) => <div key={i}>{l}</div>)}
+            {error && <div className="am-error-text">{error}</div>}
+          </div>
+        )}
+        {result && <textarea readOnly value={result.text} style={{ minHeight: 140 }} />}
+      </div>
+      <div className="am-sheet-foot">
+        {result && <button className="am-text-btn" onClick={() => api().open_file(result.file)}>Metin dosyasını aç</button>}
+        <span className="am-grow" />
+        <button className="am-ghost" onClick={onClose} disabled={busy}>Kapat</button>
+        <button className="am-primary" onClick={run} disabled={busy}>{busy ? 'Çevriliyor' : result ? 'Yeniden çevir' : 'Başlat'}</button>
+      </div>
+    </Sheet>
+  )
+}

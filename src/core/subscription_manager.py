@@ -17,13 +17,12 @@ def check_channel_new_videos(channel_url: str, known_urls: set = None) -> List[D
     """
     try:
         import yt_dlp
-        ydl_opts = {
-            'quiet':        True,
-            'no_warnings':  True,
-            'extract_flat': 'in_playlist',
-            'playlistend':  20,       # sadece son 20 videoyu al
-            'noplaylist':   False,
-        }
+        from src.core.ytdlp_base import base_opts
+        ydl_opts = base_opts(
+            extract_flat='in_playlist',
+            playlistend=20,       # sadece son 20 videoyu al
+            noplaylist=False,
+        )
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(channel_url, download=False)
         if not info:
@@ -58,10 +57,8 @@ def get_channel_name(channel_url: str) -> Optional[str]:
     """Kanal/playlist adını döndürür."""
     try:
         import yt_dlp
-        ydl_opts = {
-            'quiet': True, 'no_warnings': True,
-            'extract_flat': True, 'playlistend': 1,
-        }
+        from src.core.ytdlp_base import base_opts
+        ydl_opts = base_opts(extract_flat=True, playlistend=1)
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(channel_url, download=False)
         if info:
