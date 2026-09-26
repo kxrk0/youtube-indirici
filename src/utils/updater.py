@@ -190,6 +190,63 @@ def get_auto_updater() -> AutoUpdater:
 
 # ─── Gerçek Güncelleme İndirme + Yükleme ─────────────────────────────────────
 
+# Güncelleme betiği uygulamanın kapanmasını en çok bu kadar bekler. Eskiden sabit 2 sn
+# bekleniyordu; WebView2 kapanışı daha uzun sürünce .exe kilitli kalıyor, xcopy sessizce
+# başarısız olup eski sürüm yeniden açılıyordu (v2.2.0 test derlemesinde görüldü).
+UPDATE_EXIT_WAIT_S = 30
+# Kurulum başarısız olursa açıklamanın okunabilmesi için konsolun açık kalma süresi.
+UPDATE_ERROR_SHOW_S = 15
+
+
+def build_update_script(pid: int, app_exe: str, app_dir: str, source: str, is_zip: bool, tmp_dir: str) -> str:
+    """
+    Güncellemeyi kuran .bat içeriği. `pid` süreci kapanana kadar bekler, dosyaları kopyalar;
+    başarılıysa yeni sürümü açıp geçici klasörü siler, değilse nedenini yazıp eski sürümü açar.
+    """
+    def q(path: str) -> str:
+        # cmd tırnaklı yolda iç tırnağı kaldıramaz; Windows yollarında zaten geçersiz karakter.
+        return path.replace('"', '')
+
+    copy = (f'xcopy /e /y /i /q "{q(source)}" "{q(app_dir)}\\"' if is_zip
+            else f'copy /y "{q(source)}" "{q(app_exe)}"')
+    lines = [
+        '@echo off',
+        'chcp 65001 > nul',  # Türkçe karakterli yollar için UTF-8
+        'set /a waited=0',
+        ':wait',
+        # CSV çıktısında PID tırnak içinde ("ad","1234",...); find """1234""" yalnız o sütunu bulur.
+        # Tam yol: PATH'te Git'in GNU find'ı öndeyse `find` başka bir program çıkıyor ve
+        # bekleme hiç yapılmıyordu (test ortamında görüldü).
+        f'"%SystemRoot%\\System32\\tasklist.exe" /FI "PID eq {pid}" /FO CSV /NH'
+        f' | "%SystemRoot%\\System32\\find.exe" """{pid}""" > nul',
+        'if errorlevel 1 goto copy',
+        f'if %waited% geq {UPDATE_EXIT_WAIT_S} goto fail',
+        # timeout konsol girişi olmayınca hemen hata verir; ping her ortamda ~1 sn bekler.
+        'ping -n 2 127.0.0.1 > nul',
+        'set /a waited+=1',
+        'goto wait',
+        ':copy',
+        copy,
+        'if errorlevel 1 goto fail',
+        f'start "" "{q(app_exe)}"',
+        f'(goto) 2>nul & rd /s /q "{q(tmp_dir)}"',
+        ':fail',
+        'echo Guncelleme kurulamadi: uygulama kapanmadi ya da dosyalar kopyalanamadi.',
+        f'echo Indirilen surum burada duruyor: {q(tmp_dir)}',
+        'echo Eski surum aciliyor.',
+        f'ping -n {UPDATE_ERROR_SHOW_S + 1} 127.0.0.1 > nul',
+        f'start "" "{q(app_exe)}"',
+    ]
+    return '\r\n'.join(lines) + '\r\n'
+
+
+def write_update_script(path: str, content: str):
+    """BOM'suz UTF-8: BOM ilk satırı bozuyordu ('\ufeff@echo' komut sanılıyor, echo açık kalıyor).
+    Türkçe yollar chcp 65001'den sonra okunur. newline='': içerik zaten CRLF."""
+    with open(path, 'w', encoding='utf-8', newline='') as bat:
+        bat.write(content)
+
+
 def download_and_install_update(
     update_info: UpdateInfo,
     progress_callback: Optional[Callable[[int], None]] = None,
@@ -267,36 +324,13 @@ def download_and_install_update(
             else:
                 src_dir = extract_dir
 
-        # update.bat yaz — quotes stripped from paths, spaces preserved
         bat_path = os.path.join(tmp_dir, 'do_update.bat')
-
-        def _esc(p: str) -> str:
-            """Strip inner quotes only — leave spaces as-is for cmd quoting."""
-            return p.replace('"', '').replace("'", '')
-
-        app_dir_esc  = _esc(app_dir)
-        local_esc    = _esc(local_path)
-        src_dir_esc  = _esc(src_dir or '')
-        app_exe_esc  = _esc(app_exe)
-        tmp_dir_esc  = _esc(tmp_dir)
-
-        lines = [
-            '@echo off',
-            'chcp 65001 > nul',            # UTF-8 codepage for Turkish paths
-            'timeout /t 2 /nobreak > nul',
-        ]
-        if is_zip and src_dir:
-            lines.append(f'xcopy /e /y /i /q "{src_dir_esc}" "{app_dir_esc}\\"')
-        else:
-            lines.append(f'copy /y "{local_esc}" "{app_exe_esc}"')
-        lines += [
-            f'start "" "{app_exe_esc}"',
-            f'(goto) 2>nul & rd /s /q "{tmp_dir_esc}"',
-        ]
-
-        bat_content = '\r\n'.join(lines) + '\r\n'
-        with open(bat_path, 'w', encoding='utf-8-sig') as bat:
-            bat.write(bat_content)
+        bat_content = build_update_script(
+            pid=os.getpid(), app_exe=app_exe, app_dir=app_dir,
+            source=src_dir if is_zip and src_dir else local_path,
+            is_zip=bool(is_zip and src_dir), tmp_dir=tmp_dir,
+        )
+        write_update_script(bat_path, bat_content)
 
         # bat'ı başlat ve uygulama çıksın
         subprocess.Popen(
