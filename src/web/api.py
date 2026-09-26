@@ -81,6 +81,17 @@ def _relative_note(size, when) -> str:
     return ', '.join(parts)
 
 
+def release_summary(notes: str) -> str:
+    """Sürüm notunun ilk anlamlı satırı. Notlar Markdown; '## Yenilikler' gibi başlıklar
+    güncelleme bandında bilgi taşımıyor, madde işaretleri de gereksiz."""
+    for line in notes.splitlines():
+        text = line.strip()
+        if not text or text.startswith('#'):
+            continue
+        return text.lstrip('-*> ').strip()
+    return ''
+
+
 def _size_text(n) -> str:
     """Türkçe ondalık, 1024 tabanı (Gezgin ile aynı): 145,9 MB."""
     units = ('B', 'KB', 'MB', 'GB')
@@ -457,8 +468,8 @@ class OrtamApi:
         if info is None or not info.is_newer:
             return None
         self._update_info = info
-        notes = (info.release_notes or '').strip().splitlines()
-        return {'current': get_current_version(), 'version': info.version, 'notes': notes[0] if notes else ''}
+        return {'current': get_current_version(), 'version': info.version,
+                'notes': release_summary(info.release_notes or '')}
 
     def install_update(self) -> bool:
         """Yeni sürümü indirir; 'update' olaylarıyla ilerleme bildirir. Başarılıysa uygulama kapanır, yükleyici açar."""

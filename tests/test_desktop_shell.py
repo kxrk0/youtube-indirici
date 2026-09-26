@@ -143,3 +143,11 @@ def test_mini_url_uses_main_window_address(shell):
     shell.toggle_mini()
     assert shell.created[0].kwargs['focus'] is True
     assert shell._mini_url() == 'http://127.0.0.1:1/index.html#mini'
+
+
+def test_release_summary_skips_markdown_headings():
+    from src.web.api import release_summary
+    notes = '## Yenilikler\n\n- Mini pencere eklendi\n- Tepsi simgesi'
+    assert release_summary(notes) == 'Mini pencere eklendi'
+    assert release_summary('## Yalnız başlık') == ''
+    assert release_summary('') == ''
