@@ -135,3 +135,15 @@ def test_runs_installer_silently_into_app_folder_after_app_exits(tmp_path):
     assert (app_dir_spaced / 'surum.txt').read_text(encoding='utf-8').strip() == 'yeni'
     assert _wait_for(started), 'yeni sürüm açılmadı'
     assert not update_tmp.exists(), 'geçici klasör silinmedi'
+
+
+def test_release_names_keep_zip_before_installer_for_old_updaters():
+    """GitHub varlıkları ada göre sıralıyor; 2.6.1 ve öncesi ilk .exe/.zip'i alır ve kurucuyu
+    EXE'nin üzerine kopyalardı. Zip her iki harf duyarlılığında da önce gelmeli."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'installer'))
+    from build_release import release_names
+    zip_name, setup_name = release_names('2.6.10')
+    assert sorted([setup_name, zip_name]) == [zip_name, setup_name]
+    assert sorted([setup_name, zip_name], key=str.lower) == [zip_name, setup_name]
+    assert setup_name.lower().endswith(updater.INSTALLER_SUFFIX)
+    assert updater.pick_update_asset([{'name': n, 'browser_download_url': n} for n in (zip_name, setup_name)]) == setup_name

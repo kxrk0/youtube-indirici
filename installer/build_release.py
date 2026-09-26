@@ -4,10 +4,12 @@
 Yayın dosyalarını üretir: arayüz derlemesi → PyInstaller → NSIS kurucu + zip.
 
 Çalıştırma (depo kökünden):  venv\\Scripts\\python.exe installer\\build_release.py
-Çıktı: release\\YouTubeIndirici-<sürüm>-Setup.exe ve release\\YouTubeIndirici-v<sürüm>.zip
+Çıktı: release\\YouTubeIndirici_<sürüm>-Setup.exe ve release\\YouTubeIndirici-v<sürüm>.zip
 
-Yayına önce zip, sonra kurucu yüklenmeli: 2.6.1 ve öncesinin güncelleyicisi ilk .exe/.zip'i
-alıyor; kurucuyu alırsa EXE'nin üzerine kopyalayıp uygulamayı bozar.
+2.6.1 ve öncesinin güncelleyicisi yayındaki ilk .exe/.zip'i alıyor; kurucuyu alırsa EXE'nin
+üzerine kopyalayıp uygulamayı bozar. GitHub varlıkları yükleme sırasına göre değil ada göre
+sıralıyor (v2.6.2'de görüldü), bu yüzden adlar zip önce gelecek biçimde seçildi ('_' > '-').
+Kurucu adı '-Setup.exe' ile bitmeli (updater.INSTALLER_SUFFIX).
 """
 import os
 import shutil
@@ -47,6 +49,11 @@ def _run(cmd: list, cwd: str, timeout_s: int):
         raise SystemExit(f"Adım {timeout_s} sn'de bitmedi: {' '.join(cmd)}") from e
 
 
+def release_names(version: str) -> tuple[str, str]:
+    """(zip, kurucu) dosya adları; ada göre sıralamada zip önce gelir (modül açıklaması)."""
+    return f'{APP_DIR_NAME}-v{version}.zip', f'{APP_DIR_NAME}_{version}-Setup.exe'
+
+
 def main():
     makensis = _makensis()
     npm = shutil.which('npm')
@@ -58,10 +65,11 @@ def main():
         raise SystemExit(f'PyInstaller çıktısı yok: {DIST_DIR}')
 
     os.makedirs(RELEASE_DIR, exist_ok=True)
-    setup = os.path.join(RELEASE_DIR, f'{APP_DIR_NAME}-{APP_VERSION}-Setup.exe')
+    zip_name, setup_name = release_names(APP_VERSION)
+    setup = os.path.join(RELEASE_DIR, setup_name)
     _run([makensis, '/V2', f'/DVERSION={APP_VERSION}', f'/DDIST={DIST_DIR}', f'/DOUTFILE={setup}', NSI_SCRIPT],
          os.path.join(ROOT, 'installer'), MAKENSIS_TIMEOUT_S)
-    archive = shutil.make_archive(os.path.join(RELEASE_DIR, f'{APP_DIR_NAME}-v{APP_VERSION}'), 'zip',
+    archive = shutil.make_archive(os.path.join(RELEASE_DIR, zip_name.removesuffix('.zip')), 'zip',
                                   root_dir=os.path.dirname(DIST_DIR), base_dir=APP_DIR_NAME)
     print(f"\nSürüm {APP_VERSION} hazır:\n  {archive}\n  {setup}")
 
