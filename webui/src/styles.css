@@ -31,6 +31,11 @@ input, textarea { user-select: text; }
 }
 .am button, .am input { font-family: inherit; }
 .am :focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+/* Yazı alanları tıklayınca da focus-visible sayılıyor; kalın beyaz çerçeve yerine her alan kendi
+   yumuşak odak çizgisini taşır (.am-url:focus-within, .am-set-input, .am-form, .am-sheet textarea). */
+.am input:not([type="checkbox"]):not([type="range"]):focus-visible, .am textarea:focus-visible { outline: none; }
+.am-url:focus-within { box-shadow: inset 0 0 0 1px rgb(255 255 255 / .3); }
+.am-sheet textarea:focus-visible { box-shadow: inset 0 0 0 1px rgb(255 255 255 / .3); }
 
 .am-bg { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
 .am-bg img {
@@ -370,7 +375,7 @@ input, textarea { user-select: text; }
   height: 38px; padding: 0 12px; border: 0; outline: 0; border-radius: 11px; background: rgb(0 0 0 / .25);
   box-shadow: inset 0 0 0 1px var(--line); color: var(--text); font: inherit; font-size: 13.5px;
 }
-.am-form input:focus-visible, .am-form textarea:focus-visible { box-shadow: inset 0 0 0 1.5px var(--text); }
+.am-form input:focus-visible, .am-form textarea:focus-visible { box-shadow: inset 0 0 0 1px rgb(255 255 255 / .3); }
 .am-log {
   max-height: 140px; overflow: auto; padding: 10px 12px; border-radius: 12px; background: rgb(0 0 0 / .3);
   font-size: 12.5px; color: var(--text-2); line-height: 1.6; user-select: text;
@@ -397,7 +402,7 @@ input, textarea { user-select: text; }
   color-scheme: dark;
 }
 textarea.am-set-input { height: auto; padding: 10px 12px; resize: vertical; line-height: 1.5; }
-.am-set-input:focus-visible { box-shadow: inset 0 0 0 1.5px var(--text); }
+.am-set-input:focus-visible { box-shadow: inset 0 0 0 1px rgb(255 255 255 / .3); }
 .am-set-inline .am-set-input { width: 260px; }
 .am-set-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .am-set-form .am-set-input { width: auto; flex: 1 1 180px; }
