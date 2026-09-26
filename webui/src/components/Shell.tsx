@@ -1,9 +1,44 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { LucideIcon } from 'lucide-react'
+import { Copy, Minus, Square, X, type LucideIcon } from 'lucide-react'
 import { api, type RecentItem, type UpdateOffer } from '../bridge'
 import type { Toast } from '../store'
 import { MENU_TRANSITION } from './Controls'
+
+export const WINDOW_TITLE = 'YouTube Studio Downloader'
+
+/**
+ * Başlık çubuğu (mock: TitleBar). Windows'un başlık şeridi kaldırıldı (src/web/window_frame.py);
+ * burası bulanık arka planın üstünde. Sürükleme, kenara yaslama ve çift tıkla büyütme CSS
+ * `app-region: drag` ile WebView2'den gelir; düğmeler Windows'un kendi pencere komutlarını çalıştırır.
+ */
+export function TitleBar({ title = WINDOW_TITLE }: { title?: string }) {
+  const [maximized, setMaximized] = useState(false)
+  useEffect(() => {
+    if (!window.pywebview?.api?.window_maximized) return
+    const sync = () => {
+      api().window_maximized().then(setMaximized).catch((err) => console.error('Pencere durumu okunamadı', err))
+    }
+    sync()
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [])
+  const run = (action: 'minimize' | 'maximize' | 'close') => {
+    api().window_command(action).catch((err) => console.error(`Pencere komutu çalışmadı: ${action}`, err))
+  }
+  return (
+    <div className="am-titlebar">
+      <span className="am-titlebar-title">{title}</span>
+      <div className="am-titlebar-buttons">
+        <button aria-label="Küçült" title="Küçült" onClick={() => run('minimize')}><Minus size={14} strokeWidth={1.5} /></button>
+        <button aria-label={maximized ? 'Önceki boyut' : 'Büyüt'} title={maximized ? 'Önceki boyut' : 'Büyüt'} onClick={() => run('maximize')}>
+          {maximized ? <Copy size={12} strokeWidth={1.5} style={{ transform: 'scaleX(-1)' }} /> : <Square size={11} strokeWidth={1.5} />}
+        </button>
+        <button className="am-titlebar-close" aria-label="Kapat" title="Kapat" onClick={() => run('close')}><X size={15} strokeWidth={1.5} /></button>
+      </div>
+    </div>
+  )
+}
 
 /** Tüm pencereyi kaplayan bulanık kapak + koyulaşan örtü + gren (mock: .am-bg). */
 export function Background({ cover, busy }: { cover: string | null; busy: boolean }) {

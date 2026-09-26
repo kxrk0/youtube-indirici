@@ -22,6 +22,7 @@ from src.utils import config as cfg
 from src.utils.helpers import get_resource_dir, setup_ffmpeg_path
 from src.web.api import OrtamApi
 from src.web.tray import TrayIcon
+from src.web import window_frame
 
 WINDOW_TITLE = 'YouTube Studio Downloader'
 MINI_TITLE = 'İndirmeler'
@@ -122,6 +123,56 @@ def _work_area_logical() -> tuple[int, int]:
     return int(rect.right / scale), int(rect.bottom / scale)
 
 
+def enable_drag_regions():
+    """
+    CSS `app-region: drag` alanları başlık çubuğu gibi davransın: sürükleme, ekran kenarına yaslama,
+    çift tıkla büyütme WebView2'den gelir. Ayar ilk gezinmeden önce açılmalı (sonradan açılınca
+    sayfa yeniden yüklenene kadar etkisiz kaldığı ölçüldü); pywebview'de o ana kanca olmadığından
+    WebView2 hazır işleyicisi sarılır. Pencere oluşturulmadan önce çağrılmalı.
+    """
+    from webview.platforms import edgechromium
+    original = getattr(edgechromium.EdgeChrome, 'on_webview_ready', None)
+    if original is None:
+        raise RuntimeError('pywebview EdgeChrome.on_webview_ready yok; pywebview sürümü değişmiş, '
+                           'başlık çubuğu sürüklenemez. src/web/app.py enable_drag_regions güncellenmeli.')
+    if getattr(original, 'ortam_drag_regions', False):
+        return
+
+    def on_webview_ready(self, sender, args):
+        if args.IsSuccess:
+            try:
+                sender.CoreWebView2.Settings.IsNonClientRegionSupportEnabled = True
+            except Exception as e:
+                print(f"[Pencere] WebView2 sürükleme bölgeleri açılamadı (çalışma zamanı eski olabilir): {e}")
+        original(self, sender, args)
+
+    on_webview_ready.ortam_drag_regions = True
+    edgechromium.EdgeChrome.on_webview_ready = on_webview_ready
+
+
+def _fix_restore_bounds(form, hwnd: int, memo: dict):
+    """
+    WinForms büyütülürken/küçültülürken normal boyutu istemci alanı olarak saklar (restoredWindowBounds)
+    ve geri alırken başlıklı çerçeve payını ekleyerek pencereye çevirir. Başlık kaldırıldığı için bu pay
+    fazladan kalıyor, her büyüt-geri al'da pencere başlık yüksekliği kadar (96 DPI'da 31 px) uzuyordu.
+    Saklanan yükseklikten o pay düşülür; aynı değer iki kez düzeltilmez.
+    """
+    from System.Drawing import Rectangle
+    from System.Reflection import BindingFlags
+    form_type = form.GetType()
+    while form_type is not None and form_type.FullName != 'System.Windows.Forms.Form':
+        form_type = form_type.BaseType
+    field = form_type.GetField('restoredWindowBounds', BindingFlags.NonPublic | BindingFlags.Instance) if form_type else None
+    if field is None:
+        raise RuntimeError('WinForms Form.restoredWindowBounds alanı bulunamadı (.NET sürümü farklı).')
+    bounds = field.GetValue(form)
+    if bounds.Height < 0 or memo.get('fixed') == (bounds.X, bounds.Y, bounds.Width, bounds.Height):
+        return
+    fixed = Rectangle(bounds.X, bounds.Y, bounds.Width, bounds.Height - window_frame.caption_overhang(hwnd))
+    field.SetValue(form, fixed)
+    memo['fixed'] = (fixed.X, fixed.Y, fixed.Width, fixed.Height)
+
+
 class DesktopShell:
     """Ana pencere, mini pencere ve tepsi arasındaki yaşam döngüsü: gizle, göster, çık."""
 
@@ -138,6 +189,8 @@ class DesktopShell:
         self._hidden_notice_shown = False
         self._auto_hide: Optional[threading.Timer] = None
         self._lock = threading.RLock()
+        self._frame: Optional[window_frame.CaptionlessFrame] = None
+        self._restore_memo: dict = {}
         self._tray = TrayIcon(_icon_path(), WINDOW_TITLE, on_show=lambda: self.show_main(None),
                               on_downloads=lambda: self.show_main('queue'), on_mini=self.toggle_mini,
                               on_quit=self.request_quit)
@@ -157,6 +210,31 @@ class DesktopShell:
             self._hidden_notice_shown = True
             self._tray.notify(WINDOW_TITLE, 'Uygulama arka planda çalışıyor. Açmak için bildirim alanındaki simgeye tıkla.')
         return False
+
+    # ── Başlıksız çerçeve: başlık çubuğu arayüzün içinde (webui TitleBar) ──
+    def install_frame(self):
+        hwnd = _hwnd(self._main)
+        if hwnd is not None and self._frame is None:
+            self._frame = window_frame.CaptionlessFrame(
+                hwnd, on_left_normal=lambda: _fix_restore_bounds(self._main.native, hwnd, self._restore_memo))
+
+    def window_command(self, action: str):
+        hwnd = _hwnd(self._main)
+        if hwnd is None:
+            raise RuntimeError('Ana pencere henüz oluşmadı.')
+        if action == 'minimize':
+            command = window_frame.SC_MINIMIZE
+        elif action == 'maximize':
+            command = window_frame.SC_RESTORE if window_frame.is_maximized(hwnd) else window_frame.SC_MAXIMIZE
+        elif action == 'close':
+            command = window_frame.SC_CLOSE
+        else:
+            raise ValueError(f"Bilinmeyen pencere komutu: {action!r} (minimize, maximize, close)")
+        window_frame.system_command(hwnd, command)
+
+    def window_maximized(self) -> bool:
+        hwnd = _hwnd(self._main)
+        return hwnd is not None and window_frame.is_maximized(hwnd)
 
     def show_main(self, page: Optional[str]):
         self._main_hidden = False
@@ -273,6 +351,7 @@ def main():
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
     api = OrtamApi(Downloader())
     dev_url = os.environ.get('ORTAM_DEV_URL')
+    enable_drag_regions()
     width = max(int(cfg.get('window_width', DEFAULT_SIZE[0])), MIN_SIZE[0])
     height = max(int(cfg.get('window_height', DEFAULT_SIZE[1])), MIN_SIZE[1])
     window = webview.create_window(
@@ -287,6 +366,7 @@ def main():
     def on_shown():
         api.set_title_bar(BOOT_BACKGROUND)
         set_window_icon(window, _icon_path())
+        shell.install_frame()
 
     window.events.closing += shell.on_closing
     window.events.shown += on_shown

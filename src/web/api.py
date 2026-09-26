@@ -457,6 +457,14 @@ class OrtamApi:
         self._shell.fit_mini(int(height))
         return True
 
+    def window_command(self, action: str) -> bool:
+        """Arayüzdeki başlık çubuğu düğmeleri: 'minimize' | 'maximize' (büyüt/geri al) | 'close'."""
+        self._shell.window_command(action)
+        return True
+
+    def window_maximized(self) -> bool:
+        return self._shell.window_maximized()
+
     def quit_app(self) -> bool:
         self._shell.request_quit()
         return True

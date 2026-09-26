@@ -3,7 +3,7 @@ import { LayoutGroup, MotionConfig, AnimatePresence, motion } from 'motion/react
 import { Download, History as HistoryIcon, Home as HomeIcon, Library as LibraryIcon, Settings as SettingsIcon } from 'lucide-react'
 import { api, onBridgeEvent, waitForBridge, type RecentItem, type UpdateOffer } from './bridge'
 import { StoreProvider, useStore } from './store'
-import { Background, Rail, Toasts, UpdateBar, type RailItem } from './components/Shell'
+import { Background, Rail, TitleBar, Toasts, UpdateBar, type RailItem } from './components/Shell'
 import { Home } from './pages/Home'
 import { Queue } from './pages/Queue'
 import { History } from './pages/History'
@@ -97,6 +97,7 @@ function Shell() {
         if (hasUrl(text)) openInHome(text)
       }}>
       <Background cover={store.cover} busy={busy} />
+      <TitleBar />
       <div className="am-body">
         <Rail items={items} current={page} onSelect={(id) => setPage(id as PageId)} />
         <div className="am-pages">
@@ -138,12 +139,13 @@ export default function App() {
   if (error) {
     return (
       <div className="am am-fatal">
+        <TitleBar />
         <h1>Uygulama başlatılamadı.</h1>
         <p>{error}</p>
       </div>
     )
   }
-  if (!boot) return <div className="am" />
+  if (!boot) return <div className="am"><TitleBar /></div>
   return (
     <MotionConfig reducedMotion="user">
       <LayoutGroup>

@@ -196,6 +196,8 @@ type Api = {
   hide_mini(): Promise<boolean>
   fit_mini(height: number): Promise<boolean>
   quit_app(): Promise<boolean>
+  window_command(action: 'minimize' | 'maximize' | 'close'): Promise<boolean>
+  window_maximized(): Promise<boolean>
   check_update(): Promise<UpdateOffer | null>
   install_update(): Promise<boolean>
 }
