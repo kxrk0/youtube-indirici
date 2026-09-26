@@ -8,6 +8,8 @@ sürünce .exe kilitliyken xcopy sessizce başarısız oluyor, eski sürüm yeni
 açılıyordu (v2.2.0 test derlemesinde .exe'nin değişmediği görüldü). Betik artık
 süreç gerçekten kapanana kadar bekliyor, kopyalama başarısızsa bunu söylüyor.
 """
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -61,7 +63,7 @@ def test_waits_for_app_to_exit_before_copying(tmp_path):
     app_dir, app_exe, source, update_tmp, started = _layout(tmp_path)
     app = subprocess.Popen([sys.executable, '-c', f'import time; time.sleep({APP_ALIVE_S})'])
     t0 = time.time()
-    script = updater.build_update_script(app.pid, str(app_exe), str(app_dir), str(source), True, str(update_tmp))
+    script = updater.build_update_script(app.pid, str(app_exe), str(app_dir), str(source), 'zip', str(update_tmp))
     _run(script, update_tmp)
     assert app.poll() is not None, 'betik uygulama kapanmadan bitti'
     assert time.time() - t0 >= APP_ALIVE_S - 0.5
@@ -76,7 +78,7 @@ def test_gives_up_and_reopens_old_version_when_app_never_exits(tmp_path, monkeyp
     app_dir, app_exe, source, update_tmp, started = _layout(tmp_path)
     app = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
     try:
-        script = updater.build_update_script(app.pid, str(app_exe), str(app_dir), str(source), True, str(update_tmp))
+        script = updater.build_update_script(app.pid, str(app_exe), str(app_dir), str(source), 'zip', str(update_tmp))
         output = _run(script, update_tmp)
     finally:
         app.kill()
@@ -84,3 +86,52 @@ def test_gives_up_and_reopens_old_version_when_app_never_exits(tmp_path, monkeyp
     assert 'kurulamadi' in output
     assert _wait_for(started), 'eski sürüm yeniden açılmadı'
     assert update_tmp.exists(), 'başarısız kurulumda indirilen dosyalar silinmemeli'
+
+
+MAKENSIS_CANDIDATES = (r'C:\Program Files (x86)\NSIS\makensis.exe', r'C:\Program Files\NSIS\makensis.exe')
+MAKENSIS = shutil.which('makensis') or next((p for p in MAKENSIS_CANDIDATES if os.path.isfile(p)), None)
+BUILD_TIMEOUT_S = 60
+
+# Güncelleyicinin kurucuyu çağırdığı biçimi (/S /D=klasör) sınayan en küçük NSIS kurucusu.
+FAKE_INSTALLER_NSI = '''
+Unicode true
+RequestExecutionLevel user
+OutFile "{out}"
+InstallDir "$TEMP\\yanlis_klasor"
+Section
+  SetOutPath "$INSTDIR"
+  FileOpen $0 "$INSTDIR\\surum.txt" w
+  FileWrite $0 "yeni"
+  FileClose $0
+SectionEnd
+'''
+
+
+def test_update_asset_prefers_installer_then_zip():
+    zip_asset = {'name': 'YouTubeIndirici-v2.6.2.zip', 'browser_download_url': 'https://x/zip'}
+    setup = {'name': 'YouTubeIndirici-2.6.2-Setup.exe', 'browser_download_url': 'https://x/setup'}
+    assert updater.pick_update_asset([zip_asset, setup]) == 'https://x/setup'
+    assert updater.pick_update_asset([zip_asset]) == 'https://x/zip'
+    assert updater.pick_update_asset([{'name': 'notlar.txt', 'browser_download_url': 'https://x/t'}]) is None
+
+
+@pytest.mark.skipif(MAKENSIS is None, reason='NSIS (makensis) kurulu değil')
+def test_runs_installer_silently_into_app_folder_after_app_exits(tmp_path):
+    app_dir, app_exe, _, update_tmp, started = _layout(tmp_path)
+    app_dir_spaced = tmp_path / 'Kurulu Uygulama'
+    app_dir.rename(app_dir_spaced)
+    app_exe = app_dir_spaced / 'app.bat'
+    installer = update_tmp / 'YouTubeIndirici-9.9.9-Setup.exe'
+    nsi = tmp_path / 'sahte.nsi'
+    nsi.write_text(FAKE_INSTALLER_NSI.format(out=installer), encoding='utf-8')
+    subprocess.run([MAKENSIS, '/V1', str(nsi)], check=True, timeout=BUILD_TIMEOUT_S, capture_output=True)
+
+    app = subprocess.Popen([sys.executable, '-c', f'import time; time.sleep({APP_ALIVE_S})'])
+    script = updater.build_update_script(app.pid, str(app_exe), str(app_dir_spaced), str(installer), 'installer',
+                                         str(update_tmp))
+    _run(script, update_tmp)
+    assert app.poll() is not None, 'betik uygulama kapanmadan bitti'
+    # /D boşluklu yolda da tırnaksız verilmeli; yanlışsa kurucu varsayılan klasöre kurar.
+    assert (app_dir_spaced / 'surum.txt').read_text(encoding='utf-8').strip() == 'yeni'
+    assert _wait_for(started), 'yeni sürüm açılmadı'
+    assert not update_tmp.exists(), 'geçici klasör silinmedi'

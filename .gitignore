@@ -53,3 +53,5 @@ ffprobe.exe
 # Temp files
 tmp/
 temp/
+# Yayın çıktıları (installer/build_release.py)
+release/

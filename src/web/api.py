@@ -19,6 +19,7 @@ import re
 import shutil
 import ssl
 import subprocess
+import sys
 import threading
 import urllib.request
 from typing import Any, Optional
@@ -482,6 +483,8 @@ class OrtamApi:
     def install_update(self) -> bool:
         """Yeni sürümü indirir; 'update' olaylarıyla ilerleme bildirir. Başarılıysa uygulama kapanır, yükleyici açar."""
         from src.utils.updater import download_and_install_update
+        if not getattr(sys, 'frozen', False):
+            raise RuntimeError('Güncelleme yalnız kurulu uygulamada yapılır; şu an kaynak koddan çalışıyor.')
         if self._update_info is None:
             raise RuntimeError('Önce güncelleme denetlenmeli (check_update).')
 

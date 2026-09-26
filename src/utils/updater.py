@@ -88,13 +88,7 @@ def check_for_updates() -> Optional[UpdateInfo]:
         latest_version = data.get('tag_name', '').lstrip('v')
         
         # İndirme linkini bul
-        download_url = None
-        assets = data.get('assets', [])
-        for asset in assets:
-            name = asset.get('name', '').lower()
-            if name.endswith('.exe') or name.endswith('.zip'):
-                download_url = asset.get('browser_download_url')
-                break
+        download_url = pick_update_asset(data.get('assets', []))
         
         # İndirme linki yoksa release sayfasını kullan
         if not download_url:
@@ -194,21 +188,44 @@ def get_auto_updater() -> AutoUpdater:
 # bekleniyordu; WebView2 kapanışı daha uzun sürünce .exe kilitli kalıyor, xcopy sessizce
 # başarısız olup eski sürüm yeniden açılıyordu (v2.2.0 test derlemesinde görüldü).
 UPDATE_EXIT_WAIT_S = 30
+INSTALLER_KIND, ZIP_KIND = 'installer', 'zip'
+INSTALLER_SUFFIX = '-setup.exe'
 # Kurulum başarısız olursa açıklamanın okunabilmesi için konsolun açık kalma süresi.
 UPDATE_ERROR_SHOW_S = 15
 
 
-def build_update_script(pid: int, app_exe: str, app_dir: str, source: str, is_zip: bool, tmp_dir: str) -> str:
+def pick_update_asset(assets: list) -> Optional[str]:
     """
-    Güncellemeyi kuran .bat içeriği. `pid` süreci kapanana kadar bekler, dosyaları kopyalar;
-    başarılıysa yeni sürümü açıp geçici klasörü siler, değilse nedenini yazıp eski sürümü açar.
+    Yayındaki indirilecek dosya. Kurucu (…-Setup.exe) varsa o: sessiz kurulumla kısayolları ve
+    kaldırıcıyı da günceller. Yoksa zip (2.6.1 ve öncesi yayınlar). Eski sürümler ilk .exe/.zip'i
+    aldığı için yayında zip kurucudan önce yüklenir (installer/build_release.py).
+    """
+    by_kind = {}
+    for asset in assets:
+        name = (asset.get('name') or '').lower()
+        kind = INSTALLER_KIND if name.endswith(INSTALLER_SUFFIX) else ZIP_KIND if name.endswith('.zip') else None
+        if kind and kind not in by_kind:
+            by_kind[kind] = asset.get('browser_download_url')
+    return by_kind.get(INSTALLER_KIND) or by_kind.get(ZIP_KIND)
+
+
+def build_update_script(pid: int, app_exe: str, app_dir: str, source: str, mode: str, tmp_dir: str) -> str:
+    """
+    Güncellemeyi kuran .bat içeriği. `pid` süreci kapanana kadar bekler, sonra kurar:
+    mode='installer' ise kurucuyu aynı klasöre sessiz çalıştırır, 'zip' ise dosyaları kopyalar.
+    Başarılıysa yeni sürümü açıp geçici klasörü siler, değilse nedenini yazıp eski sürümü açar.
     """
     def q(path: str) -> str:
         # cmd tırnaklı yolda iç tırnağı kaldıramaz; Windows yollarında zaten geçersiz karakter.
         return path.replace('"', '')
 
-    copy = (f'xcopy /e /y /i /q "{q(source)}" "{q(app_dir)}\\"' if is_zip
-            else f'copy /y "{q(source)}" "{q(app_exe)}"')
+    if mode == INSTALLER_KIND:
+        # NSIS: /D en sonda ve tırnaksız olmalı (boşluklu yol dahil). start /wait çıkış kodunu errorlevel'e taşır.
+        install = f'start "" /wait "{q(source)}" /S /D={q(app_dir)}'
+    elif mode == ZIP_KIND:
+        install = f'xcopy /e /y /i /q "{q(source)}" "{q(app_dir)}\\"'
+    else:
+        raise ValueError(f"Bilinmeyen güncelleme türü: {mode!r} ('installer' ya da 'zip')")
     lines = [
         '@echo off',
         'chcp 65001 > nul',  # Türkçe karakterli yollar için UTF-8
@@ -226,7 +243,7 @@ def build_update_script(pid: int, app_exe: str, app_dir: str, source: str, is_zi
         'set /a waited+=1',
         'goto wait',
         ':copy',
-        copy,
+        install,
         'if errorlevel 1 goto fail',
         f'start "" "{q(app_exe)}"',
         f'(goto) 2>nul & rd /s /q "{q(tmp_dir)}"',
@@ -268,12 +285,11 @@ def download_and_install_update(
     if not download_url:
         return False
 
-    # Yalnızca ZIP veya EXE desteklenir
+    # Kurucu ya da zip desteklenir; ikisi de yoksa bağlantı sürüm sayfasıdır, tarayıcıda açılır.
     fname = download_url.rstrip('/').split('/')[-1]
     is_zip = fname.lower().endswith('.zip')
-    is_exe = fname.lower().endswith('.exe')
-    if not (is_zip or is_exe):
-        # HTML sayfası linki — tarayıcıya aç
+    is_installer = fname.lower().endswith(INSTALLER_SUFFIX)
+    if not (is_zip or is_installer):
         import webbrowser
         webbrowser.open(download_url)
         return False
@@ -327,8 +343,8 @@ def download_and_install_update(
         bat_path = os.path.join(tmp_dir, 'do_update.bat')
         bat_content = build_update_script(
             pid=os.getpid(), app_exe=app_exe, app_dir=app_dir,
-            source=src_dir if is_zip and src_dir else local_path,
-            is_zip=bool(is_zip and src_dir), tmp_dir=tmp_dir,
+            source=src_dir if is_zip else local_path,
+            mode=ZIP_KIND if is_zip else INSTALLER_KIND, tmp_dir=tmp_dir,
         )
         write_update_script(bat_path, bat_content)
 
