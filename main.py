@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 import sys
 
 # Windows konsolu varsayılan cp1254'te emoji/Unicode print'i UnicodeEncodeError verir.
@@ -12,8 +13,14 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 # Veri klasörüne ilk dokunuştan (modül yüklemeleri dahil) önce: 2.6.x verisi EXE'nin yanındaydı.
-from src.utils.helpers import migrate_legacy_data
+from src.utils.helpers import get_data_dir, migrate_legacy_data
 migrate_legacy_data()
+
+# Taşımadan sonra: günlük veri klasörünü oluşturur, taşıma ise klasör yokken çalışmalı.
+from src.utils import app_log
+from src.utils.updater import APP_VERSION
+app_log.install(get_data_dir())
+print(f"--- Başladı: sürüm {APP_VERSION}, PID {os.getpid()}, {sys.executable}")
 
 from src.core.downloader import Downloader
 

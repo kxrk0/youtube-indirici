@@ -197,6 +197,17 @@ export function Settings() {
               .finally(() => setUpdating(false))
           }}>{updating ? 'Güncelleniyor' : 'Güncelle'}</button>
         </Row>
+        <Row label="Sorun bildir" hint="Sürümleri, klasörleri ve son günlük satırlarını panoya kopyalar; hata bildirirken yapıştır.">
+          <div className="am-set-inline">
+            <button className="am-ghost" onClick={() => api().diagnostics()
+              .then((text) => navigator.clipboard.writeText(text))
+              .then(() => store.notify('Tanılama bilgisi kopyalandı.'))
+              .catch((err) => store.notify(`Kopyalanamadı: ${err?.message ?? err}`, 'error'))}>Tanılama bilgisini kopyala</button>
+            <button className="am-ghost" onClick={() => api().log_path().then((p) => { if (p) api().reveal(p); else store.notify('Günlük dosyası yok.', 'error') })}>
+              Günlüğü göster
+            </button>
+          </div>
+        </Row>
         <Row label="Uygulama" hint={`Sürüm ${meta.appVersion}`}>
           <div className="am-set-inline">
             {DEVELOPERS.map(([label, url]) => (

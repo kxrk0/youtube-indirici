@@ -105,6 +105,12 @@ def _size_text(n) -> str:
     return f"{int(value)} B" if i == 0 else f"{value:.1f}".replace('.', ',') + f" {units[i]}"
 
 
+# Tanılama metninde FFmpeg sürümünü sorarken beklenecek en uzun süre.
+DIAGNOSTIC_TIMEOUT_S = 10
+# Arayüzden gelen tek bir hata kaydının günlüğe yazılan en uzun hâli (yığın izi dahil).
+CLIENT_ERROR_MAX_CHARS = 4000
+
+
 class OrtamApi:
     def __init__(self, downloader):
         self._downloader = downloader
@@ -632,6 +638,45 @@ class OrtamApi:
             'ytdlpVersion': installed_version(),
             'frozen': bool(getattr(_sys, 'frozen', False)),
         }
+
+    def diagnostics(self) -> str:
+        """Hata bildirirken kopyalanacak metin: sürümler, yollar, FFmpeg, günlüğün sonu."""
+        import platform
+        import sys as _sys
+        from src.core.ytdlp_base import _ffmpeg_exe, installed_version
+        from src.utils import app_log
+        from src.utils.helpers import get_data_dir
+        from src.utils.updater import get_current_version
+        ffmpeg = _ffmpeg_exe()
+        try:
+            out = subprocess.run([ffmpeg, '-hide_banner', '-version'], capture_output=True, text=True,
+                                 timeout=DIAGNOSTIC_TIMEOUT_S, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            ffmpeg_line = (out.stdout.splitlines() or ['(çıktı yok)'])[0]
+        except (OSError, subprocess.TimeoutExpired) as e:
+            ffmpeg_line = f'çalıştırılamadı: {e}'
+        lines = [
+            f"YouTube Studio Downloader {get_current_version()} ({'kurulu EXE' if getattr(_sys, 'frozen', False) else 'kaynak kod'})",
+            f"Windows: {platform.platform()}",
+            f"Program: {_sys.executable}",
+            f"Veri klasörü: {get_data_dir()}",
+            f"yt-dlp: {installed_version()}",
+            f"FFmpeg: {ffmpeg} ({ffmpeg_line})",
+            f"Kütüphane klasörleri: {', '.join(media_library.library_dirs()) or 'yok'}",
+            f"Günlük: {app_log.log_path() or 'yok'}",
+            '',
+            '--- Günlüğün son satırları ---',
+            app_log.tail(),
+        ]
+        return '\n'.join(lines)
+
+    def log_path(self) -> Optional[str]:
+        from src.utils import app_log
+        return app_log.log_path()
+
+    def log_client_error(self, message: str) -> bool:
+        """Arayüzdeki yakalanmamış hatalar günlüğe; yoksa WebView içinde kaybolurlar."""
+        print(f"[Arayüz] {str(message)[:CLIENT_ERROR_MAX_CHARS]}", file=sys.stderr)
+        return True
 
     def set_setting(self, key: str, value) -> bool:
         settings_schema.write(key, value)

@@ -176,6 +176,9 @@ type Api = {
   pick_media_file(): Promise<string | null>
   settings(): Promise<{ values: Settings; appVersion: string; ytdlpVersion: string; frozen: boolean }>
   set_setting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<boolean>
+  diagnostics(): Promise<string>
+  log_path(): Promise<string | null>
+  log_client_error(message: string): Promise<boolean>
   ytdlp_latest(): Promise<string | null>
   update_ytdlp(): Promise<string>
   test_proxy(proxy: string): Promise<string>
