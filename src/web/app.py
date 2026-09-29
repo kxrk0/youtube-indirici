@@ -19,8 +19,9 @@ from webview.window import FixPoint
 
 from src.core.downloader import Downloader
 from src.utils import config as cfg
-from src.utils.helpers import get_resource_dir, setup_ffmpeg_path
+from src.utils.helpers import get_data_dir, get_resource_dir, setup_ffmpeg_path
 from src.web.api import OrtamApi
+from src.web.single_instance import SingleInstance
 from src.web.tray import TrayIcon
 from src.web import window_frame
 
@@ -243,6 +244,13 @@ class DesktopShell:
         if page:
             self._api._emit({'type': 'navigate', 'page': page})
 
+    def bring_to_front(self):
+        """İkinci açılış isteği: pencereyi göster ve öne al (izni ikinci kopya verir, single_instance)."""
+        self.show_main(None)
+        hwnd = _hwnd(self._main)
+        if hwnd:
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+
     def _remember_size(self):
         cfg.set_value('window_width', self._main.width)
         cfg.set_value('window_height', self._main.height)
@@ -345,6 +353,11 @@ class DesktopShell:
 
 
 def main():
+    instance = SingleInstance(get_data_dir())
+    if not instance.acquire():
+        # Uygulama zaten açık (çoğu zaman tepside): onun penceresini öne getir, ikinci kopya açma.
+        instance.signal_existing()
+        return
     setup_ffmpeg_path()
     if sys.platform == 'win32':
         # Görev çubuğunda python.exe yerine uygulamanın kendi simgesi ve grubu görünsün.
@@ -372,6 +385,7 @@ def main():
     window.events.shown += on_shown
     window.events.loaded += api._start_services
     shell.start()
+    instance.listen(shell.bring_to_front)
     webview.start(gui='edgechromium', debug=bool(dev_url), http_server=not dev_url)
 
 

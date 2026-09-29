@@ -107,6 +107,37 @@ SectionEnd
 '''
 
 
+# Kurucu iptal olunca (NSIS Abort) çıkış kodu 2; betik bunu eski sürümü açıp kodla söylemeli.
+FAILING_INSTALLER_NSI = '''
+Unicode true
+RequestExecutionLevel user
+OutFile "{out}"
+Section
+  SetErrorLevel 2
+SectionEnd
+'''
+FAILED_INSTALL_EXIT_CODE = 2
+
+
+@pytest.mark.skipif(MAKENSIS is None, reason='NSIS (makensis) kurulu değil')
+def test_failed_install_names_the_exit_code_and_reopens_old_version(tmp_path, monkeypatch):
+    """2.7.0 -> 2.7.1: tek mesaj ("kapanmadı, izin verilmedi ya da kopyalanamadı") nedeni göstermedi."""
+    monkeypatch.setattr(updater, 'UPDATE_ERROR_SHOW_S', 0)
+    app_dir, app_exe, _, update_tmp, started = _layout(tmp_path)
+    installer = update_tmp / 'YouTubeIndirici-9.9.9-Setup.exe'
+    nsi = tmp_path / 'bozuk.nsi'
+    nsi.write_text(FAILING_INSTALLER_NSI.format(out=installer), encoding='utf-8')
+    subprocess.run([MAKENSIS, '/V1', str(nsi)], check=True, timeout=BUILD_TIMEOUT_S, capture_output=True)
+    app = subprocess.Popen([sys.executable, '-c', 'pass'])
+    app.wait()
+    script = updater.build_update_script(app.pid, str(app_exe), str(app_dir), str(installer), 'installer', str(update_tmp))
+    output = _run(script, update_tmp)
+    assert f'kurulum {FAILED_INSTALL_EXIT_CODE} koduyla bitti' in output
+    assert 'kapanmadi' not in output
+    assert _wait_for(started), 'eski sürüm yeniden açılmadı'
+    assert update_tmp.exists(), 'başarısız kurulumda indirilen dosyalar silinmemeli'
+
+
 def test_update_asset_prefers_installer_then_zip():
     zip_asset = {'name': 'YouTubeIndirici-v2.6.2.zip', 'browser_download_url': 'https://x/zip'}
     setup = {'name': 'YouTubeIndirici-2.6.2-Setup.exe', 'browser_download_url': 'https://x/setup'}

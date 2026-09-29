@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(ROOT, 'installer'))
 import build_release  # noqa: E402  (installer/ yola eklendikten sonra)
 
 PATH_SCRIPT = os.path.join(ROOT, 'installer', 'path_entry.ps1')
+CLOSE_SCRIPT = os.path.join(ROOT, 'installer', 'close_running_app.ps1')
 NSI_SCRIPT = os.path.join(ROOT, 'installer', 'youtube_indirici.nsi')
 TEST_KEY = r'Software\YouTubeIndiriciPathTest'
 FFMPEG_BIN = r'C:\Program Files\FFmpeg\bin'
@@ -160,3 +161,43 @@ def test_real_installer_script_compiles(tmp_path):
         cwd=os.path.dirname(NSI_SCRIPT), capture_output=True, text=True, timeout=BUILD_TIMEOUT_S)
     assert result.returncode == 0, result.stdout + result.stderr
     assert out.is_file()
+
+
+# Uzun süre çalışan, konsol girişi istemeyen küçük bir Windows programı; uygulama EXE'si yerine kopyalanır.
+PING_EXE = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'PING.EXE')
+PROCESS_ALIVE_S = 60
+
+
+def _start_copy(folder, name='YouTubeIndirici.exe'):
+    folder.mkdir(parents=True, exist_ok=True)
+    exe = folder / name
+    shutil.copy(PING_EXE, exe)
+    proc = subprocess.Popen([str(exe), '-n', str(PROCESS_ALIVE_S), '127.0.0.1'], stdout=subprocess.DEVNULL,
+                            creationflags=subprocess.CREATE_NO_WINDOW)
+    return exe, proc
+
+
+def test_close_running_app_stops_every_copy_of_that_exe_only(tmp_path):
+    """2.7.0 -> 2.7.1: tepsideki ikinci kopya EXE'yi kilitli tuttu, sessiz kurulum iptal oldu."""
+    installed = tmp_path / 'Program Files' / 'YouTubeIndirici'
+    exe, first = _start_copy(installed)
+    second = subprocess.Popen([str(exe), '-n', str(PROCESS_ALIVE_S), '127.0.0.1'], stdout=subprocess.DEVNULL,
+                              creationflags=subprocess.CREATE_NO_WINDOW)
+    _, elsewhere = _start_copy(tmp_path / 'tasinabilir')
+    try:
+        result = subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', CLOSE_SCRIPT,
+                                 '-ExePath', str(exe)], capture_output=True, text=True, timeout=SCRIPT_TIMEOUT_S)
+        assert result.returncode == 0, result.stderr
+        assert first.poll() is not None and second.poll() is not None, 'kurulum klasöründeki kopyalar kapanmalı'
+        assert elsewhere.poll() is None, 'başka klasördeki kopyaya dokunulmamalı'
+        exe.unlink()  # kilit kalktı mı: kurucunun yapacağı gibi üzerine yazılabilmeli
+    finally:
+        for proc in (first, second, elsewhere):
+            proc.kill()
+
+
+def test_close_running_app_with_nothing_running_succeeds(tmp_path):
+    result = subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', CLOSE_SCRIPT,
+                             '-ExePath', str(tmp_path / 'YouTubeIndirici.exe')],
+                            capture_output=True, text=True, timeout=SCRIPT_TIMEOUT_S)
+    assert result.returncode == 0, result.stderr

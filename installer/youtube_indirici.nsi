@@ -74,23 +74,46 @@ Var LegacyDir
 ; silindiği için yeni sürümü kurucu açar.
 Var LaunchAfterSilent
 
-; Uygulama açıkken EXE kilitli; üzerine yazılamaz. Kullanıcıya kapatmasını söyler.
-; Sessiz kurulumda (güncelleyici) betik uygulamanın kapanmasını zaten bekliyor; yine açıksa iptal.
+; Uygulama açıkken EXE kilitli; üzerine yazılamaz.
+; Etkileşimli kurulumda kullanıcıya kapatmasını söyler.
+; Sessiz kurulumda (güncelleyici, sessiz kaldırma) o klasörden çalışan bütün kopyaları kapatır:
+; güncelleme betiği yalnız güncellemeyi başlatan kopyayı bekliyor, tepsideki öteki kopya EXE'yi
+; kilitli tutunca kurulum iptal oluyordu (2.7.0 -> 2.7.1'de görüldü).
 ; Kullanım: Push "<klasör>" / Call [un.]WaitForAppClosed
+!define SILENT_UNLOCK_RETRIES 10
+!define SILENT_UNLOCK_WAIT_MS 500
 !macro DEFINE_WAIT_FOR_APP_CLOSED UN
 Function ${UN}WaitForAppClosed
   Exch $R0
   Push $0
+  Push $1
+  StrCpy $1 0
+  ${If} ${Silent}
+  ${AndIf} ${FileExists} "$R0\${APP_EXE}"
+    InitPluginsDir
+    File "/oname=$PLUGINSDIR\close_running_app.ps1" "close_running_app.ps1"
+    nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\close_running_app.ps1" -ExePath "$R0\${APP_EXE}"'
+    Pop $0
+    DetailPrint "Açık kopyaları kapatma sonucu: $0"
+  ${EndIf}
   wait_app:
     IfFileExists "$R0\${APP_EXE}" 0 app_closed
     ClearErrors
     FileOpen $0 "$R0\${APP_EXE}" a
     IfErrors 0 app_unlocked
+    ; Süreç bittikten sonra Windows dosyayı kısa bir süre daha kilitli tutabiliyor.
+    ${If} ${Silent}
+    ${AndIf} $1 < ${SILENT_UNLOCK_RETRIES}
+      IntOp $1 $1 + 1
+      Sleep ${SILENT_UNLOCK_WAIT_MS}
+      Goto wait_app
+    ${EndIf}
     MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${APP_NAME} açık. Kapatıp (bildirim alanındaki simgeden Çıkış) Yeniden Dene'ye bas." /SD IDCANCEL IDRETRY wait_app
     Abort
   app_unlocked:
     FileClose $0
   app_closed:
+  Pop $1
   Pop $0
   Pop $R0
 FunctionEnd
