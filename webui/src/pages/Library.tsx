@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ChevronDown, Music, MoreHorizontal, RefreshCw, Search, Video } from 'lucide-react'
 import { api, onBridgeEvent, type LibraryFile, type Tags } from '../bridge'
@@ -20,30 +20,73 @@ const SORTS = [
 type SortId = (typeof SORTS)[number]['id']
 type Kind = 'all' | 'video' | 'audio'
 
-/** Oturum boyunca kapak önbelleği: sayfa her açıldığında Python'a tekrar sorulmasın. */
-const thumbCache = new Map<string, string | null>()
+/** Oturumda sonucu belli olan kapaklar: sayfaya dönünce iskelet yeniden oynamasın. */
+const thumbResults = new Map<string, 'ready' | 'none'>()
+/** Kütüphane taranırken gösterilen iskelet kart sayısı (tipik pencerede iki sıra). */
+const SKELETON_CARDS = 8
 
-function Thumb({ file }: { file: LibraryFile }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [src, setSrc] = useState<string | null | undefined>(thumbCache.get(file.path))
-  useEffect(() => {
-    if (src !== undefined || !ref.current) return
-    // Görünür olunca iste: yüzlerce dosyada ffmpeg'i hepsi için aynı anda çalıştırmayalım.
-    const io = new IntersectionObserver((entries) => {
-      if (!entries.some((e) => e.isIntersecting)) return
-      io.disconnect()
-      api().library_thumbnail(file.path).then((d) => { thumbCache.set(file.path, d); setSrc(d) })
-        .catch((err) => { console.error('Kapak alınamadı', file.name, err); thumbCache.set(file.path, null); setSrc(null) })
-    }, { rootMargin: '200px' })
-    io.observe(ref.current)
-    return () => io.disconnect()
-  }, [file.path, file.name, src])
-  const Icon = file.kind === 'audio' ? Music : Video
+/**
+ * Kapak <img> ile yerel sunucudan gelir (src/web/thumb_server.py): tarayıcı yüklemeyi ve çözmeyi
+ * ana iş parçacığı dışında yapar, görünür olana kadar istemez (loading="lazy").
+ * Yüklenene kadar iskelet parıltısı; kapak yoksa (404) tür simgesi.
+ */
+const Thumb = memo(function Thumb({ src, kind }: { src: string; kind: LibraryFile['kind'] }) {
+  const [state, setState] = useState<'loading' | 'ready' | 'none'>(() => thumbResults.get(src) ?? 'loading')
+  const settle = (result: 'ready' | 'none') => { thumbResults.set(src, result); setState(result) }
+  const Icon = kind === 'audio' ? Music : Video
   return (
-    <div ref={ref} className="am-lib-thumb">
-      {src ? <motion.img src={src} alt="" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }} />
-        : <Icon size={26} strokeWidth={1.4} />}
+    <div className="am-lib-thumb" data-state={state}>
+      {state === 'none'
+        ? <Icon size={26} strokeWidth={1.4} />
+        : <img src={src} alt="" loading="lazy" decoding="async" onLoad={() => settle('ready')} onError={() => settle('none')} />}
     </div>
+  )
+})
+
+type CardActions = {
+  toggleMenu: (path: string) => void
+  closeMenu: () => void
+  convert: (path: string) => void
+  editTags: (path: string) => void
+  transcribe: (path: string) => void
+  remove: (file: LibraryFile) => void
+}
+
+/** Kart yalnız kendi dosyası ya da menü durumu değişince yeniden çizilir (318 kartta arama yazarken fark ediyor). */
+const LibraryCard = memo(function LibraryCard({ file, menuOpen, actions }: { file: LibraryFile; menuOpen: boolean; actions: CardActions }) {
+  return (
+    <li className="am-lib-card">
+      <div className="am-lib-cv">
+        <button className="am-lib-open" onClick={() => api().open_file(file.path)} title={`${file.name} dosyasını aç`}>
+          <Thumb src={file.thumb} kind={file.kind} />
+          <strong>{file.name.replace(/\.[^.]+$/, '')}</strong>
+          <span>{file.ext.toUpperCase()}, {fmt.size(file.size)}</span>
+        </button>
+      </div>
+      <button className="am-icon-btn am-lib-more" aria-label="Eylemler" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => actions.toggleMenu(file.path)}>
+        <MoreHorizontal size={16} strokeWidth={1.8} />
+      </button>
+      <Popover open={menuOpen} onClose={actions.closeMenu} style={{ right: 6, top: 40 }}>
+        <button onClick={() => { api().reveal(file.path); actions.closeMenu() }}>Klasörde göster</button>
+        <button onClick={() => { actions.convert(file.path); actions.closeMenu() }}>Dönüştür</button>
+        {TAGGABLE.has(file.ext) && <button onClick={() => { actions.editTags(file.path); actions.closeMenu() }}>Etiketleri düzenle</button>}
+        <button onClick={() => { actions.transcribe(file.path); actions.closeMenu() }}>Metne çevir (Whisper)</button>
+        <button onClick={() => { actions.remove(file); actions.closeMenu() }}>Sil</button>
+      </Popover>
+    </li>
+  )
+})
+
+function SkeletonCard() {
+  return (
+    <li className="am-lib-card" aria-hidden="true">
+      <div className="am-lib-cv">
+        <div className="am-lib-open am-lib-skeleton">
+          <div className="am-lib-thumb" data-state="loading" />
+          <i /><i /><i />
+        </div>
+      </div>
+    </li>
   )
 }
 
@@ -78,6 +121,15 @@ export function Library() {
     }
     return list.sort(by[sort])
   }, [files, query, kind, sort])
+
+  const actions = useMemo<CardActions>(() => ({
+    toggleMenu: (path) => setMenuFor((m) => (m === path ? null : path)),
+    closeMenu: () => setMenuFor(null),
+    convert: setConvertFor,
+    editTags: setTagsFor,
+    transcribe: setTranscribeFor,
+    remove: setDeleteFor,
+  }), [])
 
   const pickAndConvert = () => api().pick_media_file().then((p) => p && setConvertFor(p))
 
@@ -121,26 +173,9 @@ export function Library() {
         <p className="am-empty-note">{files.length ? 'Bu filtreyle eşleşen dosya yok.' : 'Kütüphane klasörlerinde henüz medya dosyası yok.'}</p>
       )}
 
-      <ul className="am-lib-grid">
-        {shown.map((f) => (
-          <li key={f.path} className="am-lib-card">
-            <button className="am-lib-open" onClick={() => api().open_file(f.path)} title={`${f.name} dosyasını aç`}>
-              <Thumb file={f} />
-              <strong>{f.name.replace(/\.[^.]+$/, '')}</strong>
-              <span>{f.ext.toUpperCase()}, {fmt.size(f.size)}</span>
-            </button>
-            <button className="am-icon-btn am-lib-more" aria-label="Eylemler" aria-haspopup="menu" aria-expanded={menuFor === f.path} onClick={() => setMenuFor((m) => (m === f.path ? null : f.path))}>
-              <MoreHorizontal size={16} strokeWidth={1.8} />
-            </button>
-            <Popover open={menuFor === f.path} onClose={() => setMenuFor(null)} style={{ right: 6, top: 40 }}>
-              <button onClick={() => { api().reveal(f.path); setMenuFor(null) }}>Klasörde göster</button>
-              <button onClick={() => { setConvertFor(f.path); setMenuFor(null) }}>Dönüştür</button>
-              {TAGGABLE.has(f.ext) && <button onClick={() => { setTagsFor(f.path); setMenuFor(null) }}>Etiketleri düzenle</button>}
-              <button onClick={() => { setTranscribeFor(f.path); setMenuFor(null) }}>Metne çevir (Whisper)</button>
-              <button onClick={() => { setDeleteFor(f); setMenuFor(null) }}>Sil</button>
-            </Popover>
-          </li>
-        ))}
+      <ul className="am-lib-grid" aria-busy={files === null && !loadError}>
+        {files === null && !loadError && Array.from({ length: SKELETON_CARDS }, (_, i) => <SkeletonCard key={i} />)}
+        {shown.map((f) => <LibraryCard key={f.path} file={f} menuOpen={menuFor === f.path} actions={actions} />)}
       </ul>
 
       <AnimatePresence>

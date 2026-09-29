@@ -120,7 +120,11 @@ export type RetryRequest =
   | { mode: 'home'; url: string }
   | { mode: 'direct'; url: string; type: 'video' | 'audio'; format: string; outputDir: string; title: string; channel: string; thumbnail: string; duration: number }
 
-export type LibraryFile = { path: string; name: string; ext: string; kind: 'video' | 'audio'; size: number; mtime: number }
+export type LibraryFile = {
+  path: string; name: string; ext: string; kind: 'video' | 'audio'; size: number; mtime: number
+  /** Kart kapağının yerel adresi (src/web/thumb_server.py); kapak yoksa 404 döner. */
+  thumb: string
+}
 export type Tags = { title: string; artist: string; album: string; year: string; comment: string }
 
 export type Settings = {
@@ -164,7 +168,6 @@ type Api = {
   export_history(kind: 'csv' | 'json'): Promise<string | null>
   retry_request(id: number): Promise<RetryRequest>
   library(): Promise<{ files: LibraryFile[]; dirs: string[] }>
-  library_thumbnail(path: string): Promise<string | null>
   delete_file(path: string): Promise<boolean>
   read_tags(path: string): Promise<Tags>
   write_tags(path: string, values: Tags): Promise<boolean>

@@ -8,6 +8,7 @@ import hashlib
 import os
 import platform
 import subprocess
+import threading
 from typing import Callable, Optional
 
 from src.utils import config as cfg
@@ -96,6 +97,60 @@ def thumbnail(media_path: str) -> Optional[str]:
         print(f"[Kütüphane] Kapak çıkarılamadı ({os.path.basename(media_path)}): {e}")
         return None
     return out if ok and os.path.exists(out) else None
+
+
+# Kütüphane kartı 16:9, en geniş ~240 CSS px; 2x ekranda keskin kalacak boyut. Tam kapak (640 px kare
+# ses kapağı ya da video karesi) karta ~100 KB taşıyordu, bu boyutta ~15-25 KB.
+CARD_THUMB_SIZE = (480, 270)
+CARD_THUMB_QUALITY = 82
+# Kapağı olmayan dosyanın işareti: yüzlerce kapaksız MP3'te her açılışta etiket okunmasın.
+NO_CARD_THUMB_MARK = '.yok'
+
+
+def _card_thumb_base(media_path: str) -> str:
+    # Anahtara boyut ve değişme zamanı da girer: dosya değişince (kapak eklenince) eski sonuç kullanılmaz.
+    st = os.stat(media_path)
+    key = f'{media_path}|{st.st_size}|{st.st_mtime_ns}'
+    cache_dir = os.path.join(get_data_dir(), 'thumbnails', 'card')
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, hashlib.md5(key.encode('utf-8')).hexdigest())
+
+
+# card_thumbnail(render=False) dönüşü: kapak henüz üretilmedi (üretmek ffmpeg/etiket okuma ister).
+NOT_RENDERED = object()
+
+
+def card_thumbnail(media_path: str, render: bool = True):
+    """Kart boyutunda (CARD_THUMB_SIZE, ortadan kırpılmış) JPEG kapağın yolu; kapak yoksa None.
+    render=False: yalnız önbelleğe bakar, üretilmemişse NOT_RENDERED döner."""
+    from PIL import Image, ImageOps
+    if not os.path.isfile(media_path):
+        return None
+    base = _card_thumb_base(media_path)
+    out, missing = base + '.jpg', base + NO_CARD_THUMB_MARK
+    if os.path.exists(out):
+        return out
+    if os.path.exists(missing):
+        return None
+    if not render:
+        return NOT_RENDERED
+    full = thumbnail(media_path)
+    if not full:
+        open(missing, 'wb').close()
+        return None
+    try:
+        with Image.open(full) as im:
+            card = ImageOps.fit(im.convert('RGB'), CARD_THUMB_SIZE, Image.Resampling.LANCZOS)
+    except OSError as e:
+        # Bozuk gömülü kapak: kartta simge kalır, her açılışta yeniden denenmez.
+        print(f"[Kütüphane] Kapak okunamadı ({os.path.basename(media_path)}): {e}")
+        open(missing, 'wb').close()
+        return None
+    # Aynı kart iki istekte aynı anda üretilebilir; geçici adlar çakışmasın.
+    tmp = f'{out}.{os.getpid()}.{threading.get_ident()}.tmp'
+    card.save(tmp, 'JPEG', quality=CARD_THUMB_QUALITY, optimize=True, progressive=True)
+    os.replace(tmp, out)
+    return out
 
 
 def delete_file(path: str):

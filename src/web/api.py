@@ -29,6 +29,7 @@ from src.core.database import get_download_history
 from src.core import automation, settings_schema
 from src.core.download_job import ConcurrencyLimiter, DownloadJob, DownloadRequest, SpotifyJob
 from src.core.formats import auto_codec_family, build_quality_options
+from src.web.thumb_server import ThumbServer
 from src.utils import config as cfg
 from src.utils.helpers import get_clipboard_text, get_os_download_dir, is_valid_url
 
@@ -122,6 +123,8 @@ class OrtamApi:
         # Süren işlerin son durumu: sonradan açılan mini pencere buradan başlar.
         self._job_views: dict[int, dict] = {}
         self._update_info = None
+        # Kütüphane kapaklarını sunan yerel sunucu; kütüphane ilk açıldığında başlar.
+        self._thumbs: Optional[ThumbServer] = None
 
     # pywebview, altçizgiyle başlayan öznitelikleri JS'e açmaz.
     def _attach(self, window, paint_title_bar):
@@ -582,14 +585,14 @@ class OrtamApi:
 
     # ── Kütüphane ──
     def library(self) -> dict:
-        return {'files': media_library.scan(), 'dirs': media_library.library_dirs()}
-
-    def library_thumbnail(self, path: str) -> Optional[str]:
-        thumb = media_library.thumbnail(path)
-        if not thumb:
-            return None
-        with open(thumb, 'rb') as f:
-            return f"data:image/jpeg;base64,{base64.b64encode(f.read()).decode('ascii')}"
+        # pywebview her çağrıyı ayrı iş parçacığında çalıştırır; iki sunucu açılmasın.
+        with self._lock:
+            if self._thumbs is None:
+                self._thumbs = ThumbServer()
+        files = media_library.scan()
+        for f in files:
+            f['thumb'] = self._thumbs.register(f['path'], f['size'], f['mtime'])
+        return {'files': files, 'dirs': media_library.library_dirs()}
 
     def delete_file(self, path: str) -> bool:
         media_library.delete_file(path)
