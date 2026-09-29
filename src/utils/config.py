@@ -6,8 +6,8 @@ import secrets
 from typing import Any, Dict
 
 def _get_config_dir() -> str:
-    from src.utils.helpers import get_app_dir
-    return os.path.join(get_app_dir(), 'cache')
+    from src.utils.helpers import get_data_dir
+    return get_data_dir()
 
 _CONFIG_DIR = None  # lazily resolved
 _CONFIG_PATH = None  # lazily resolved

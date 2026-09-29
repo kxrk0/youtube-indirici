@@ -10,7 +10,9 @@ import json
 import os
 from typing import List, Dict, Any
 
-_PROFILES_FILE = os.path.join(os.getcwd(), 'cache', 'profiles.json')
+from src.utils.helpers import get_data_dir
+
+_PROFILES_FILE = os.path.join(get_data_dir(), 'profiles.json')
 
 DEFAULT_PROFILES: List[Dict[str, Any]] = [
     {

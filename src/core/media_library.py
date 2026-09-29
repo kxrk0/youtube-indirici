@@ -11,7 +11,7 @@ import subprocess
 from typing import Callable, Optional
 
 from src.utils import config as cfg
-from src.utils.helpers import extract_video_thumbnail, get_app_dir, get_ffmpeg_path, get_os_download_dir
+from src.utils.helpers import extract_video_thumbnail, get_data_dir, get_ffmpeg_path, get_os_download_dir
 
 VIDEO_EXTS = {'.mp4', '.webm', '.mkv', '.avi', '.mov'}
 AUDIO_EXTS = {'.mp3', '.m4a', '.flac', '.ogg', '.opus', '.wav', '.aac'}
@@ -55,7 +55,7 @@ def scan() -> list[dict]:
 
 def _thumb_cache_path(media_path: str) -> str:
     # Eski arayüzün önbellek düzeni: aynı dosyanın kapağı yeniden üretilmez.
-    cache_dir = os.path.join(get_app_dir(), 'cache', 'thumbnails')
+    cache_dir = os.path.join(get_data_dir(), 'thumbnails')
     os.makedirs(cache_dir, exist_ok=True)
     return os.path.join(cache_dir, hashlib.md5(media_path.encode('utf-8')).hexdigest() + '.jpg')
 

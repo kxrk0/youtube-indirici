@@ -20,7 +20,9 @@ import os
 import re
 from typing import Optional
 
-_RULES_FILE = os.path.join(os.getcwd(), 'cache', 'auto_rules.json')
+from src.utils.helpers import get_data_dir
+
+_RULES_FILE = os.path.join(get_data_dir(), 'auto_rules.json')
 
 # Built-in default rules
 _DEFAULT_RULES: list[dict] = [

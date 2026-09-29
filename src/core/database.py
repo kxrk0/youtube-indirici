@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from contextlib import contextmanager
 
-from src.utils.helpers import get_app_dir
+from src.utils.helpers import get_data_dir
 
 
 class DownloadHistory:
@@ -31,8 +31,7 @@ class DownloadHistory:
             db_path: Veritabanı dosya yolu (varsayılan: cache/history.db)
         """
         if db_path is None:
-            # EXE ve kaynak modda doğru kök dizini kullan (frozen EXE'de __file__ _MEIPASS'a işaret eder)
-            cache_dir = os.path.join(get_app_dir(), 'cache')
+            cache_dir = get_data_dir()
             os.makedirs(cache_dir, exist_ok=True)
             db_path = os.path.join(cache_dir, 'history.db')
             

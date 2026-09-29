@@ -28,8 +28,10 @@ import importlib.util
 import traceback
 from typing import List, Dict, Any, Optional
 
+from src.utils import helpers
 
-_PLUGINS_DIR  = os.path.join(os.getcwd(), 'plugins')
+
+_PLUGINS_DIR  = helpers.get_plugins_dir()
 _loaded: List[Any] = []   # loaded module objects
 _enabled: Dict[str, bool] = {}
 

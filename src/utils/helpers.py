@@ -23,6 +23,65 @@ def get_app_dir() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+# Kurulu EXE'nin verisi %LOCALAPPDATA%\<bu ad>: Program Files'a yazılamıyor.
+DATA_DIR_NAME = 'YouTubeIndirici'
+# 2.6.2–2.6.3 kurucusunun kullanıcı klasörü (%LOCALAPPDATA%\Programs\YouTubeIndirici); verisi cache\ altındaydı.
+LEGACY_INSTALL_SUBDIR = os.path.join('Programs', 'YouTubeIndirici')
+
+
+def _local_appdata() -> str:
+    return os.environ.get('LOCALAPPDATA') or os.path.join(os.path.expanduser('~'), 'AppData', 'Local')
+
+
+def get_data_dir() -> str:
+    """Ayar, geçmiş ve kapakların yazıldığı klasör. EXE: %LOCALAPPDATA%\\YouTubeIndirici;
+    kaynak koddan çalışırken proje kökündeki cache\\."""
+    import sys
+    if getattr(sys, 'frozen', False):
+        return os.path.join(_local_appdata(), DATA_DIR_NAME)
+    return os.path.join(get_app_dir(), 'cache')
+
+
+def get_plugins_dir() -> str:
+    """Kullanıcı eklentileri. EXE: veri klasöründe; kaynak koddan çalışırken proje kökündeki plugins\\."""
+    import sys
+    if getattr(sys, 'frozen', False):
+        return os.path.join(get_data_dir(), 'plugins')
+    return os.path.join(get_app_dir(), 'plugins')
+
+
+def migrate_legacy_data() -> Optional[str]:
+    """2.6.x ve öncesi veriyi EXE'nin yanında (cache\\, plugins\\) tutuyordu. Yeni veri klasörü
+    henüz yoksa ilk bulunan eski konumdan kopyalar; eskisi yedek olarak kalır.
+    Kopyalanan kaynağı, kopyalama olmadıysa None döner."""
+    import shutil
+    import sys
+    if not getattr(sys, 'frozen', False):
+        return None
+    data_dir = get_data_dir()
+    if os.path.isdir(data_dir):
+        return None
+    for root in (get_app_dir(), os.path.join(_local_appdata(), LEGACY_INSTALL_SUBDIR)):
+        legacy_cache = os.path.join(root, 'cache')
+        if not os.path.isdir(legacy_cache):
+            continue
+        # Yarım kalan kopya veri klasörü sayılıp bir daha denenmesin diye önce yanına kopyalanır.
+        staging = data_dir + '.tasiniyor'
+        shutil.rmtree(staging, ignore_errors=True)
+        try:
+            shutil.copytree(legacy_cache, staging)
+            legacy_plugins = os.path.join(root, 'plugins')
+            if os.path.isdir(legacy_plugins):
+                shutil.copytree(legacy_plugins, os.path.join(staging, 'plugins'))
+            os.rename(staging, data_dir)
+        except OSError as e:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise RuntimeError(f"Eski veriler {legacy_cache} konumundan {data_dir} konumuna taşınamadı: {e}. "
+                               f"Klasörü elle kopyalayıp uygulamayı yeniden aç.") from e
+        return root
+    return None
+
+
 def get_resource_dir() -> str:
     """Paketlenmiş kaynakların (locales, icons) dizinini döndürür"""
     import sys

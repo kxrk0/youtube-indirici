@@ -11,6 +11,10 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
+# Veri klasörüne ilk dokunuştan (modül yüklemeleri dahil) önce: 2.6.x verisi EXE'nin yanındaydı.
+from src.utils.helpers import migrate_legacy_data
+migrate_legacy_data()
+
 from src.core.downloader import Downloader
 
 # Tarayıcı eklentisi katmanı kaldırıldı: arayüz yalnızca masaüstü penceresidir (src/web),
