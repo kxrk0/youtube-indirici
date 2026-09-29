@@ -453,10 +453,16 @@ class DownloadHistory:
 
 # Global instance
 _history_instance = None
+# İlk açılışta arayüz çağrısı ve zamanlayıcı iş parçacığı örneği aynı anda istiyordu; ikisi de yeni
+# veritabanını oluşturup WAL'a geçmeye çalışınca biri "database is locked" alıyordu. Tek örnek,
+# tabloları kurduktan sonra paylaşılır; öteki iş parçacıkları WAL'daki dosyaya bağlanır.
+_history_lock = threading.Lock()
 
 def get_download_history() -> DownloadHistory:
     """Global DownloadHistory instance'ını döndür"""
     global _history_instance
     if _history_instance is None:
-        _history_instance = DownloadHistory()
+        with _history_lock:
+            if _history_instance is None:
+                _history_instance = DownloadHistory()
     return _history_instance
