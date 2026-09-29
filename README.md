@@ -23,38 +23,32 @@
 
 ## 🛠️ Kurulum
 
-Programı çalıştırmak için bilgisayarınızda **Python 3.8** veya üzeri kurulu olmalıdır.
+1. [Son sürüm sayfasından](https://github.com/kxrk0/youtube-indirici/releases/latest) `YouTubeIndirici_<sürüm>-Setup.exe` dosyasını indirin.
+2. Çalıştırın; Windows yönetici izni ister (program `C:\Program Files\YouTubeIndirici` klasörüne kurulur).
+3. Kurulum bitince masaüstündeki **YouTube Studio Downloader** kısayoluyla açın.
 
-### 1. Projeyi İndirin
-Bu repoyu klonlayın veya ZIP olarak indirip bir klasöre çıkarın.
+Kurulum ayrıca:
+* FFmpeg bilgisayarda yoksa `C:\Program Files\FFmpeg` klasörüne kurup sistem PATH'ine ekler.
+* Başlat menüsüne kısayol ve "Uygulamalar" listesine kaldırıcı ekler.
+* Güncellemeleri uygulama kendisi önerir ve kurar.
+
+Ayarlar ve indirme geçmişi `%LOCALAPPDATA%\YouTubeIndirici` klasöründe durur; kaldırırken silinip silinmeyeceği sorulur.
+
+### Kaynak koddan çalıştırma (geliştirme)
+
+Python 3.11, Node.js ve (MP3/birleştirme için) PATH'te FFmpeg gerekir.
 
 ```bash
 git clone https://github.com/kxrk0/youtube-indirici.git
 cd youtube-indirici
-```
-
-### 2. Otomatik Kurulum (Önerilen)
-Proje klasöründeki `install_and_run.bat` dosyasına çift tıklayın. Bu işlem:
-1.  Sanal ortam (venv) oluşturur.
-2.  Gerekli kütüphaneleri yükler.
-3.  Programı başlatır.
-
-### 3. Manuel Kurulum
-Eğer manuel kurmak isterseniz:
-
-```bash
-# Sanal ortam oluştur
 python -m venv venv
-
-# Sanal ortamı aktif et (Windows)
 .\venv\Scripts\activate
-
-# Gereksinimleri yükle
 pip install -r requirements.txt
-
-# Programı başlat
+cd webui && npm install && npm run build && cd ..
 python main.py
 ```
+
+Kurucuyu üretmek için: `venv\Scripts\python.exe installer\build_release.py` (NSIS gerekir: `winget install NSIS.NSIS`).
 
 ---
 
@@ -69,8 +63,7 @@ python main.py
 
 ## ⚙️ Gereksinimler
 
-*   Python 3.8+
-*   FFmpeg (Proje klasöründe `ffmpeg-8.0.1-essentials_build` içinde gelmektedir, ayrıca kurulmasına gerek yoktur).
+*   Windows 10 veya 11 (64 bit)
 *   İnternet bağlantısı :)
 
 ---

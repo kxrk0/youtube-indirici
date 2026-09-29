@@ -248,7 +248,7 @@ def build_update_script(pid: int, app_exe: str, app_dir: str, source: str, mode:
         f'start "" "{q(app_exe)}"',
         f'(goto) 2>nul & rd /s /q "{q(tmp_dir)}"',
         ':fail',
-        'echo Guncelleme kurulamadi: uygulama kapanmadi ya da dosyalar kopyalanamadi.',
+        'echo Guncelleme kurulamadi: uygulama kapanmadi, yonetici izni verilmedi ya da dosyalar kopyalanamadi.',
         f'echo Indirilen surum burada duruyor: {q(tmp_dir)}',
         'echo Eski surum aciliyor.',
         f'ping -n {UPDATE_ERROR_SHOW_S + 1} 127.0.0.1 > nul',

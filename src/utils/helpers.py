@@ -27,6 +27,8 @@ def get_app_dir() -> str:
 DATA_DIR_NAME = 'YouTubeIndirici'
 # 2.6.2–2.6.3 kurucusunun kullanıcı klasörü (%LOCALAPPDATA%\Programs\YouTubeIndirici); verisi cache\ altındaydı.
 LEGACY_INSTALL_SUBDIR = os.path.join('Programs', 'YouTubeIndirici')
+# installer/youtube_indirici.nsi FFmpeg'i sistemde bulamazsa buraya kurar ($PROGRAMFILES64\FFmpeg\bin).
+FFMPEG_INSTALL_SUBDIR = ('FFmpeg', 'bin')
 
 
 def _local_appdata() -> str:
@@ -200,14 +202,18 @@ def _find_ffmpeg_bin_dir() -> Optional[str]:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         root_dirs.append(os.path.dirname(os.path.dirname(current_dir)))
 
+    candidates = []
     for root_dir in root_dirs:
-        candidates = [
+        candidates += [
             os.path.join(root_dir, 'ffmpeg-bin'),
             os.path.join(root_dir, 'ffmpeg', 'bin'),
         ] + glob.glob(os.path.join(root_dir, 'ffmpeg*', 'bin'))
-        for candidate in candidates:
-            if os.path.exists(os.path.join(candidate, exe_name)):
-                return candidate
+    # Kurucunun FFmpeg'i koyduğu yer. PATH'e de ekleniyor ama PATH değişikliğinden önce açılmış
+    # bir süreçten başlatılan uygulama onu göremez.
+    candidates.append(os.path.join(os.environ.get('ProgramFiles', r'C:\Program Files'), *FFMPEG_INSTALL_SUBDIR))
+    for candidate in candidates:
+        if os.path.exists(os.path.join(candidate, exe_name)):
+            return candidate
 
     return None
 

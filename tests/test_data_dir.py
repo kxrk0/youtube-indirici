@@ -76,3 +76,10 @@ def test_source_mode_keeps_project_cache(monkeypatch):
     assert helpers.get_data_dir() == os.path.join(helpers.get_app_dir(), 'cache')
     assert helpers.migrate_legacy_data() is None
 
+
+def test_finds_ffmpeg_where_the_installer_puts_it(frozen_app, tmp_path, monkeypatch):
+    program_files = tmp_path / 'Program Files'
+    ffmpeg_bin = program_files / 'FFmpeg' / 'bin'
+    _write(ffmpeg_bin / 'ffmpeg.exe', 'exe')
+    monkeypatch.setenv('ProgramFiles', str(program_files))
+    assert helpers.get_ffmpeg_path() == str(ffmpeg_bin)
