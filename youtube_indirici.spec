@@ -12,7 +12,6 @@ datas = [
     ('locales', 'locales'),
     ('extension/icons', 'extension/icons'),
     ('native_host', 'native_host'),
-    ('cache', 'cache'),
     ('webui/dist', 'webui/dist'),
     ('assets', 'assets'),
 ]
