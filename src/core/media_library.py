@@ -34,23 +34,47 @@ def library_dirs() -> list[str]:
     return [d for d in dirs if os.path.isdir(d)]
 
 
+# Alt klasör derinliği: kategori kuralının klasörü (İndirilenler\Müzik) ve otomatik düzenlemenin
+# platform klasörü (…\Müzik\Youtube) üst üste gelebilir. Eskiden hiç inilmiyordu; düzenlenen
+# dosyalar kütüphanede görünmüyordu. Daha derine inmek İndirilenler'deki ilgisiz ağaçları tarar.
+MAX_SCAN_DEPTH = 2
+
+
+def _scan_dir(root: str, folder: str, depth: int, seen: set, files: list):
+    try:
+        entries = list(os.scandir(folder))
+    except OSError as e:
+        print(f"[Kütüphane] Klasör okunamadı, atlandı ({folder}): {e}")
+        return
+    for entry in entries:
+        # Gizli/sistem klasörleri ($RECYCLE.BIN, .git) ve bağlantılar (döngü) atlanır.
+        if entry.name.startswith(('.', '$')) or entry.is_symlink():
+            continue
+        if entry.is_dir(follow_symlinks=False):
+            if depth < MAX_SCAN_DEPTH:
+                _scan_dir(root, entry.path, depth + 1, seen, files)
+            continue
+        ext = os.path.splitext(entry.name)[1].lower()
+        key = os.path.normcase(entry.path)
+        if ext not in MEDIA_EXTS or key in seen or not entry.is_file(follow_symlinks=False):
+            continue
+        seen.add(key)
+        st = entry.stat()
+        files.append({
+            'path': entry.path, 'name': entry.name, 'ext': ext.lstrip('.'),
+            'kind': 'audio' if ext in AUDIO_EXTS else 'video',
+            'size': st.st_size, 'mtime': st.st_mtime,
+            # Kütüphane klasörüne göre alt klasör ('' = doğrudan içinde); aramada ve kartta kullanılır.
+            'folder': os.path.relpath(folder, root) if folder != root else '',
+        })
+
+
 def scan() -> list[dict]:
-    """Kütüphane klasörlerindeki medya dosyaları (alt klasörlere inmez; eski davranış)."""
-    files = []
-    seen = set()
+    """Kütüphane klasörlerindeki medya dosyaları, MAX_SCAN_DEPTH alt klasöre kadar."""
+    files: list = []
+    seen: set = set()
     for folder in library_dirs():
-        for name in os.listdir(folder):
-            ext = os.path.splitext(name)[1].lower()
-            path = os.path.join(folder, name)
-            if ext not in MEDIA_EXTS or path in seen or not os.path.isfile(path):
-                continue
-            seen.add(path)
-            st = os.stat(path)
-            files.append({
-                'path': path, 'name': name, 'ext': ext.lstrip('.'),
-                'kind': 'audio' if ext in AUDIO_EXTS else 'video',
-                'size': st.st_size, 'mtime': st.st_mtime,
-            })
+        _scan_dir(folder, folder, 0, seen, files)
     return files
 
 

@@ -124,6 +124,8 @@ export type LibraryFile = {
   path: string; name: string; ext: string; kind: 'video' | 'audio'; size: number; mtime: number
   /** Kart kapağının yerel adresi (src/web/thumb_server.py); kapak yoksa 404 döner. */
   thumb: string
+  /** Kütüphane klasörüne göre alt klasör; doğrudan içindeyse boş. */
+  folder: string
 }
 export type Tags = { title: string; artist: string; album: string; year: string; comment: string }
 

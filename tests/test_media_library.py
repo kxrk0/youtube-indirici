@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Kütüphane taraması, etiket gidiş-dönüşü ve dönüştürme doğrulaması."""
+import os
 from unittest.mock import patch
 
 import pytest
@@ -36,3 +37,33 @@ def test_desteklenmeyen_turde_etiket_hatasi_aciklayici():
 def test_bilinmeyen_donusturme_formati_reddedilir():
     with pytest.raises(ValueError, match='Desteklenmeyen format'):
         media_library.convert('x.mp4', 'gif')
+
+
+def _scan(root, extra=''):
+    conf = {'download_dir': str(root), 'library_folders': extra}
+    with patch('src.core.media_library.cfg.get', side_effect=lambda k, d=None: conf.get(k, d)):
+        return media_library.scan()
+
+
+def test_tarama_duzenlenen_alt_klasorleri_de_gorur(tmp_path):
+    """Otomatik düzenleme İndirilenler/Youtube'a, kategori kuralı İndirilenler/Müzik'e taşıyordu;
+    tarama alt klasöre inmediği için o dosyalar kütüphanede görünmüyordu."""
+    (tmp_path / 'Youtube').mkdir()
+    (tmp_path / 'Müzik' / 'Youtube').mkdir(parents=True)
+    (tmp_path / 'a' / 'b' / 'c').mkdir(parents=True)
+    (tmp_path / '.gizli').mkdir()
+    (tmp_path / 'ust.mp3').write_bytes(b'x')
+    (tmp_path / 'Youtube' / 'klip.mp4').write_bytes(b'x')
+    (tmp_path / 'Müzik' / 'Youtube' / 'sarki.mp3').write_bytes(b'x')
+    (tmp_path / 'a' / 'b' / 'c' / 'cok_derin.mp3').write_bytes(b'x')
+    (tmp_path / '.gizli' / 'gizli.mp3').write_bytes(b'x')
+    found = {f['name']: f['folder'] for f in _scan(tmp_path)}
+    assert found == {'ust.mp3': '', 'klip.mp4': 'Youtube', 'sarki.mp3': os.path.join('Müzik', 'Youtube')}
+
+
+def test_ek_klasor_indirme_klasorunun_icindeyse_dosya_iki_kez_gelmez(tmp_path):
+    (tmp_path / 'Youtube').mkdir()
+    (tmp_path / 'Youtube' / 'klip.mp4').write_bytes(b'x')
+    names = [f['name'] for f in _scan(tmp_path, str(tmp_path / 'Youtube'))]
+    assert names == ['klip.mp4']
+

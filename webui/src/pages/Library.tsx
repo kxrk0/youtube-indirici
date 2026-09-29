@@ -60,7 +60,7 @@ const LibraryCard = memo(function LibraryCard({ file, menuOpen, actions }: { fil
         <button className="am-lib-open" onClick={() => api().open_file(file.path)} title={`${file.name} dosyasını aç`}>
           <Thumb src={file.thumb} kind={file.kind} />
           <strong>{file.name.replace(/\.[^.]+$/, '')}</strong>
-          <span>{file.ext.toUpperCase()}, {fmt.size(file.size)}</span>
+          <span>{file.ext.toUpperCase()}, {fmt.size(file.size)}{file.folder && `, ${file.folder.replaceAll('\\', ' / ')}`}</span>
         </button>
       </div>
       <button className="am-icon-btn am-lib-more" aria-label="Eylemler" aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => actions.toggleMenu(file.path)}>
@@ -111,7 +111,7 @@ export function Library() {
 
   const shown = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr-TR')
-    const list = (files ?? []).filter((f) => (kind === 'all' || f.kind === kind) && (!q || f.name.toLocaleLowerCase('tr-TR').includes(q)))
+    const list = (files ?? []).filter((f) => (kind === 'all' || f.kind === kind) && (!q || `${f.name} ${f.folder}`.toLocaleLowerCase('tr-TR').includes(q)))
     const by: Record<SortId, (a: LibraryFile, b: LibraryFile) => number> = {
       new: (a, b) => b.mtime - a.mtime,
       old: (a, b) => a.mtime - b.mtime,
@@ -146,7 +146,7 @@ export function Library() {
       <div className="am-lib-filters">
         <div className="am-url am-search" style={{ marginBottom: 0 }}>
           <Search size={16} strokeWidth={1.8} style={{ color: 'var(--text-2)', flex: 'none' }} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Dosya adı ara" aria-label="Kütüphanede ara" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Dosya ya da klasör ara" aria-label="Kütüphanede ara" />
         </div>
         <div className="am-seg" role="radiogroup" aria-label="Tür" style={{ marginBottom: 0 }}>
           {(['all', 'video', 'audio'] as const).map((k) => (
