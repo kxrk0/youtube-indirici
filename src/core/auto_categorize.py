@@ -78,6 +78,14 @@ def save_rules(rules: list[dict]):
         json.dump(rules, f, ensure_ascii=False, indent=2)
 
 
+def _ends_with_folder(base: str, subdir: str) -> bool:
+    """base zaten subdir ile bitiyor mu (harf duyarsız, / ve \\ eşit, sondaki ayraç yok sayılır).
+    İndirme klasörü İndirilenler\\Müzik iken "Müzik" kuralı İndirilenler\\Müzik\\Müzik açıyordu."""
+    base_parts = os.path.normcase(os.path.normpath(base)).split(os.sep)
+    sub_parts = os.path.normcase(os.path.normpath(subdir)).split(os.sep)
+    return base_parts[-len(sub_parts):] == sub_parts
+
+
 def apply_rules(
     url: str,
     title: str = '',
@@ -102,7 +110,8 @@ def apply_rules(
                 result: dict = {'matched_rule': rule.get('name', '')}
                 subdir = rule.get('output_subdir', '')
                 if subdir and base_output_dir:
-                    result['output_dir'] = os.path.join(base_output_dir, subdir)
+                    result['output_dir'] = (base_output_dir if _ends_with_folder(base_output_dir, subdir)
+                                            else os.path.join(base_output_dir, subdir))
                 elif subdir:
                     result['output_dir'] = subdir
                 if rule.get('type_override'):
