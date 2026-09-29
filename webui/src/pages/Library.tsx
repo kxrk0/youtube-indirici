@@ -53,7 +53,9 @@ type CardActions = {
 }
 
 /** Kart yalnız kendi dosyası ya da menü durumu değişince yeniden çizilir (318 kartta arama yazarken fark ediyor). */
-const LibraryCard = memo(function LibraryCard({ file, menuOpen, actions }: { file: LibraryFile; menuOpen: boolean; actions: CardActions }) {
+const LibraryCard = memo(function LibraryCard({ file, menuOpen, canTranscribe, actions }: {
+  file: LibraryFile; menuOpen: boolean; canTranscribe: boolean; actions: CardActions
+}) {
   return (
     <li className="am-lib-card">
       <div className="am-lib-cv">
@@ -70,7 +72,7 @@ const LibraryCard = memo(function LibraryCard({ file, menuOpen, actions }: { fil
         <button onClick={() => { api().reveal(file.path); actions.closeMenu() }}>Klasörde göster</button>
         <button onClick={() => { actions.convert(file.path); actions.closeMenu() }}>Dönüştür</button>
         {TAGGABLE.has(file.ext) && <button onClick={() => { actions.editTags(file.path); actions.closeMenu() }}>Etiketleri düzenle</button>}
-        <button onClick={() => { actions.transcribe(file.path); actions.closeMenu() }}>Metne çevir (Whisper)</button>
+        {canTranscribe && <button onClick={() => { actions.transcribe(file.path); actions.closeMenu() }}>Metne çevir (Whisper)</button>}
         <button onClick={() => { actions.remove(file); actions.closeMenu() }}>Sil</button>
       </Popover>
     </li>
@@ -93,6 +95,7 @@ function SkeletonCard() {
 export function Library() {
   const store = useStore()
   const [files, setFiles] = useState<LibraryFile[] | null>(null)
+  const [canTranscribe, setCanTranscribe] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [kind, setKind] = useState<Kind>('all')
@@ -105,7 +108,7 @@ export function Library() {
   const [deleteFor, setDeleteFor] = useState<LibraryFile | null>(null)
 
   const load = useCallback(() => {
-    api().library().then((r) => { setFiles(r.files); setLoadError(null) }).catch((err) => setLoadError(String(err?.message ?? err)))
+    api().library().then((r) => { setFiles(r.files); setCanTranscribe(r.canTranscribe); setLoadError(null) }).catch((err) => setLoadError(String(err?.message ?? err)))
   }, [])
   useEffect(load, [load])
 
@@ -175,7 +178,7 @@ export function Library() {
 
       <ul className="am-lib-grid" aria-busy={files === null && !loadError}>
         {files === null && !loadError && Array.from({ length: SKELETON_CARDS }, (_, i) => <SkeletonCard key={i} />)}
-        {shown.map((f) => <LibraryCard key={f.path} file={f} menuOpen={menuFor === f.path} actions={actions} />)}
+        {shown.map((f) => <LibraryCard key={f.path} file={f} menuOpen={menuFor === f.path} canTranscribe={canTranscribe} actions={actions} />)}
       </ul>
 
       <AnimatePresence>

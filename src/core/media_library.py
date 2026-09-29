@@ -271,6 +271,13 @@ def convert(path: str, fmt: str) -> str:
 
 # ── Transkript ──
 
+def transcription_available() -> bool:
+    """Whisper yüklenebilir mi. Kurulu EXE'de yok (torch ~480 MB, youtube_indirici.spec excludes);
+    arayüz o zaman "Metne çevir"i hiç göstermez, kullanıcıya pip kurmasını söylemez."""
+    import importlib.util
+    return importlib.util.find_spec('whisper') is not None
+
+
 def transcribe(path: str, model: str, language: Optional[str], on_progress: Callable[[str], None]) -> tuple[str, str]:
     """Whisper ile metne çevirir, dosyanın yanına .txt yazar. (metin, txt yolu) döndürür."""
     if model not in WHISPER_MODELS:

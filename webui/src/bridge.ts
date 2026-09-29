@@ -169,7 +169,7 @@ type Api = {
   missing_files(): Promise<string[]>
   export_history(kind: 'csv' | 'json'): Promise<string | null>
   retry_request(id: number): Promise<RetryRequest>
-  library(): Promise<{ files: LibraryFile[]; dirs: string[] }>
+  library(): Promise<{ files: LibraryFile[]; dirs: string[]; canTranscribe: boolean }>
   delete_file(path: string): Promise<boolean>
   read_tags(path: string): Promise<Tags>
   write_tags(path: string, values: Tags): Promise<boolean>

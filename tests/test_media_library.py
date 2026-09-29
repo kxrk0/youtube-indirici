@@ -67,3 +67,8 @@ def test_ek_klasor_indirme_klasorunun_icindeyse_dosya_iki_kez_gelmez(tmp_path):
     names = [f['name'] for f in _scan(tmp_path, str(tmp_path / 'Youtube'))]
     assert names == ['klip.mp4']
 
+
+def test_whisper_yoksa_metne_cevirme_gosterilmez(monkeypatch):
+    import importlib.util
+    monkeypatch.setattr(importlib.util, 'find_spec', lambda name: None)
+    assert media_library.transcription_available() is False

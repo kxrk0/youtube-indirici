@@ -598,7 +598,8 @@ class OrtamApi:
         files = media_library.scan()
         for f in files:
             f['thumb'] = self._thumbs.register(f['path'], f['size'], f['mtime'])
-        return {'files': files, 'dirs': media_library.library_dirs()}
+        return {'files': files, 'dirs': media_library.library_dirs(),
+                'canTranscribe': media_library.transcription_available()}
 
     def delete_file(self, path: str) -> bool:
         media_library.delete_file(path)
