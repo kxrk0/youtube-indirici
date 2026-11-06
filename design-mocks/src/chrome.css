@@ -1,0 +1,55 @@
+/* Seçim kabuğu: mock'larla yarışmasın diye nötr, sistem fontu, tek ton. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+body {
+  background: #5c5f63;
+  color: #f2f3f4;
+  font: 13px/1.45 system-ui, "Segoe UI", sans-serif;
+}
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
+
+.chrome { display: flex; flex-direction: column; min-height: 100%; }
+.chrome-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 24px;
+  align-items: center;
+  padding: 14px 20px;
+  min-height: 108px;
+}
+.chrome-dirs { display: flex; gap: 4px; background: #4a4d51; padding: 4px; border-radius: 10px; }
+.chrome-dir {
+  display: flex; align-items: center; gap: 8px;
+  border: 0; background: transparent; padding: 8px 14px; border-radius: 7px; cursor: pointer;
+  font-weight: 600;
+}
+.chrome-dir:hover { background: #55585c; }
+.chrome-dir[aria-pressed="true"] { background: #f2f3f4; color: #1d1f21; }
+.chrome-dir kbd {
+  font: 600 11px/1 system-ui; opacity: .55; border: 1px solid currentColor; border-radius: 4px; padding: 2px 4px;
+}
+.chrome-notes { max-width: 68ch; }
+.chrome-notes p { margin: 0; }
+.chrome-qt { opacity: .7; margin-top: 4px !important; }
+.chrome-controls { display: flex; gap: 10px; align-items: end; }
+.chrome-controls label { display: grid; gap: 4px; font-size: 12px; opacity: .9; }
+.chrome-controls select {
+  background: #4a4d51; border: 0; border-radius: 7px; padding: 8px 10px; max-width: 260px;
+}
+.chrome-restart {
+  background: transparent; border: 1px solid #8a8d91; border-radius: 7px; padding: 8px 12px; cursor: pointer;
+}
+.chrome-restart:hover { border-color: #f2f3f4; }
+.chrome-stage { display: flex; justify-content: center; padding: 0 16px 24px; }
+.chrome-window {
+  transform-origin: top center;
+  flex: none;
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: 0 30px 80px -20px rgb(0 0 0 / .55), 0 0 0 1px rgb(0 0 0 / .35);
+  position: relative;
+}
+@media (max-width: 900px) {
+  .chrome-bar { grid-template-columns: 1fr; }
+}

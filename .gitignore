@@ -55,3 +55,5 @@ tmp/
 temp/
 # Yayın çıktıları (installer/build_release.py)
 release/
+
+node_modules/
